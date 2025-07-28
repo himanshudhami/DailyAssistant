@@ -7,7 +7,37 @@
 
 import SwiftUI
 
+// MARK: - View Mode
+enum NotesViewMode: CaseIterable {
+    case grid
+    case list
+    
+    var icon: String {
+        switch self {
+        case .grid: return "square.grid.2x2"
+        case .list: return "list.bullet"
+        }
+    }
+}
+
+// MARK: - Sort Options
+enum NoteSortOption: CaseIterable {
+    case modifiedDate
+    case createdDate
+    case title
+    
+    var displayName: String {
+        switch self {
+        case .modifiedDate: return "Modified"
+        case .createdDate: return "Created"
+        case .title: return "Title"
+        }
+    }
+}
+
+// MARK: - Main Notes List View
 struct NotesListView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject var viewModel: NotesListViewModel
     @State private var showingNoteEditor = false
     @State private var selectedNote: Note?
@@ -15,23 +45,27 @@ struct NotesListView: View {
     @State private var searchText = ""
     @State private var selectedCategory: Category?
     @State private var sortOption: NoteSortOption = .modifiedDate
+    @State private var viewMode: NotesViewMode = .grid
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Search and Filter Bar
-                SearchAndFilterBar(
+                // Top Controls
+                TopControlsBar(
                     searchText: $searchText,
                     selectedCategory: $selectedCategory,
-                    sortOption: $sortOption
+                    sortOption: $sortOption,
+                    viewMode: $viewMode,
+                    categories: viewModel.categories
                 )
                 
-                // Notes List
+                // Notes Content
                 if viewModel.filteredNotes.isEmpty {
                     EmptyNotesView(showingNoteEditor: $showingNoteEditor)
                 } else {
-                    NotesGrid(
+                    NotesContentView(
                         notes: viewModel.filteredNotes,
+                        viewMode: viewMode,
                         selectedNote: $selectedNote,
                         showingNoteEditor: $showingNoteEditor
                     )
@@ -40,33 +74,18 @@ struct NotesListView: View {
             .navigationTitle("Notes")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
-                        Button("All Notes") {
-                            selectedCategory = nil
-                        }
-                        
-                        Divider()
-                        
-                        ForEach(viewModel.categories) { category in
-                            Button(category.name) {
-                                selectedCategory = category
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                    }
-                }
-                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
+                    HStack(spacing: 16) {
                         Button(action: { showingVoiceRecorder = true }) {
                             Image(systemName: "mic.circle.fill")
-                                .foregroundColor(.red)
+                                .foregroundColor(theme.error)
+                                .font(.title2)
                         }
                         
                         Button(action: { showingNoteEditor = true }) {
                             Image(systemName: "plus.circle.fill")
+                                .foregroundColor(theme.primary)
+                                .font(.title2)
                         }
                     }
                 }
@@ -102,279 +121,456 @@ struct NotesListView: View {
     }
 }
 
-struct SearchAndFilterBar: View {
+// MARK: - Top Controls Bar
+struct TopControlsBar: View {
+    @Environment(\.appTheme) private var theme
     @Binding var searchText: String
     @Binding var selectedCategory: Category?
     @Binding var sortOption: NoteSortOption
+    @Binding var viewMode: NotesViewMode
+    let categories: [Category]
     
     var body: some View {
-        HStack {
-            // Category Filter
-            Menu {
-                Button("All Categories") {
-                    selectedCategory = nil
-                }
+        VStack(spacing: 8) {
+            // First row: Category and Sort
+            HStack {
+                CategoryFilterButton(
+                    selectedCategory: $selectedCategory,
+                    categories: categories
+                )
                 
-                // Add category options here
-            } label: {
-                HStack {
-                    Image(systemName: "folder")
-                    Text(selectedCategory?.name ?? "All")
-                    Image(systemName: "chevron.down")
-                }
-                .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-            }
-            
-            Spacer()
-            
-            // Sort Options
-            Menu {
-                Button("Modified Date") {
-                    sortOption = .modifiedDate
-                }
-                Button("Created Date") {
-                    sortOption = .createdDate
-                }
-                Button("Title") {
-                    sortOption = .title
-                }
-            } label: {
-                HStack {
-                    Image(systemName: "arrow.up.arrow.down")
-                    Text(sortOption.displayName)
-                }
-                .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
+                Spacer()
+                
+                SortOptionsButton(sortOption: $sortOption)
+                
+                ViewModeButton(viewMode: $viewMode)
             }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .background(theme.background)
     }
 }
 
-struct EmptyNotesView: View {
-    @Binding var showingNoteEditor: Bool
+// MARK: - Filter Components
+struct CategoryFilterButton: View {
+    @Environment(\.appTheme) private var theme
+    @Binding var selectedCategory: Category?
+    let categories: [Category]
     
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            Image(systemName: "note.text")
-                .font(.system(size: 80))
-                .foregroundColor(.gray)
-            
-            Text("No Notes Yet")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-            
-            Text("Create your first note by tapping the + button or record a voice note")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-            
-            Button("Create Note") {
-                showingNoteEditor = true
+        Menu {
+            Button("All Categories") {
+                selectedCategory = nil
             }
-            .buttonStyle(.borderedProminent)
-            .padding(.top)
             
-            Spacer()
+            Divider()
+            
+            ForEach(categories) { category in
+                Button(category.name) {
+                    selectedCategory = category
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .font(.caption)
+                Text(selectedCategory?.name ?? "All")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+            .foregroundColor(theme.textPrimary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(theme.sectionBackground)
+            .cornerRadius(8)
         }
     }
 }
 
-struct NotesGrid: View {
+struct SortOptionsButton: View {
+    @Environment(\.appTheme) private var theme
+    @Binding var sortOption: NoteSortOption
+    
+    var body: some View {
+        Menu {
+            ForEach(NoteSortOption.allCases, id: \.self) { option in
+                Button(option.displayName) {
+                    sortOption = option
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.caption)
+                Text(sortOption.displayName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(theme.textPrimary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(theme.sectionBackground)
+            .cornerRadius(8)
+        }
+    }
+}
+
+struct ViewModeButton: View {
+    @Environment(\.appTheme) private var theme
+    @Binding var viewMode: NotesViewMode
+    
+    var body: some View {
+        Button(action: {
+            viewMode = viewMode == .grid ? .list : .grid
+        }) {
+            Image(systemName: viewMode.icon)
+                .font(.caption)
+                .foregroundColor(theme.textPrimary)
+                .padding(8)
+                .background(theme.sectionBackground)
+                .cornerRadius(8)
+        }
+    }
+}
+
+// MARK: - Notes Content View
+struct NotesContentView: View {
+    let notes: [Note]
+    let viewMode: NotesViewMode
+    @Binding var selectedNote: Note?
+    @Binding var showingNoteEditor: Bool
+    
+    var body: some View {
+        ScrollView {
+            switch viewMode {
+            case .grid:
+                NotesGridView(
+                    notes: notes,
+                    selectedNote: $selectedNote,
+                    showingNoteEditor: $showingNoteEditor
+                )
+            case .list:
+                NotesListContentView(
+                    notes: notes,
+                    selectedNote: $selectedNote,
+                    showingNoteEditor: $showingNoteEditor
+                )
+            }
+        }
+    }
+}
+
+// MARK: - Grid View
+struct NotesGridView: View {
     let notes: [Note]
     @Binding var selectedNote: Note?
     @Binding var showingNoteEditor: Bool
     
     private let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible())
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
     ]
     
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(notes) { note in
-                    NoteCard(note: note)
-                        .onTapGesture {
-                            DispatchQueue.main.async {
-                                selectedNote = note
-                                showingNoteEditor = true
-                            }
-                        }
-                }
-            }
-            .padding()
-        }
-    }
-}
-
-struct NoteCard: View {
-    let note: Note
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Header with category and date
-            HStack {
-                if let category = note.category {
-                    Text(category.name)
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(hex: category.color).opacity(0.2))
-                        .foregroundColor(Color(hex: category.color))
-                        .cornerRadius(4)
-                }
-                
-                Spacer()
-                
-                Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            // Title
-            Text(note.title.isEmpty ? "Untitled" : note.title)
-                .font(.headline)
-                .lineLimit(2)
-                .foregroundColor(.primary)
-            
-            // Content preview
-            if !note.content.isEmpty {
-                Text(note.content)
-                    .font(.body)
-                    .lineLimit(3)
-                    .foregroundColor(.secondary)
-            }
-            
-            // AI Summary if available
-            if let aiSummary = note.aiSummary, !aiSummary.isEmpty {
-                HStack {
-                    Image(systemName: "brain.head.profile")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                    
-                    Text(aiSummary)
-                        .font(.caption)
-                        .lineLimit(2)
-                        .foregroundColor(.blue)
-                }
-                .padding(.top, 4)
-            }
-            
-            // Tags
-            if !note.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(note.tags.prefix(3), id: \.self) { tag in
-                            Text("#\(tag)")
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(4)
-                        }
-                        
-                        if note.tags.count > 3 {
-                            Text("+\(note.tags.count - 3)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+        LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(notes) { note in
+                UniformNoteCard(note: note)
+                    .onTapGesture {
+                        DispatchQueue.main.async {
+                            selectedNote = note
+                            showingNoteEditor = true
                         }
                     }
-                }
-            }
-            
-            // Attachments and audio indicator
-            HStack {
-                if !note.attachments.isEmpty {
-                    HStack(spacing: 2) {
-                        Image(systemName: "paperclip")
-                            .font(.caption)
-                        Text("\(note.attachments.count)")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.secondary)
-                }
-                
-                if note.audioURL != nil {
-                    Image(systemName: "waveform")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                
-                Spacer()
-                
-                if !note.actionItems.isEmpty {
-                    HStack(spacing: 2) {
-                        Image(systemName: "checkmark.circle")
-                            .font(.caption)
-                        Text("\(note.actionItems.count)")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.green)
-                }
             }
         }
         .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
     }
 }
 
-// MARK: - Sort Options
-enum NoteSortOption: CaseIterable {
-    case modifiedDate
-    case createdDate
-    case title
+// MARK: - List View
+struct NotesListContentView: View {
+    let notes: [Note]
+    @Binding var selectedNote: Note?
+    @Binding var showingNoteEditor: Bool
     
-    var displayName: String {
-        switch self {
-        case .modifiedDate: return "Modified"
-        case .createdDate: return "Created"
-        case .title: return "Title"
+    var body: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(notes) { note in
+                NoteListRow(note: note)
+                    .onTapGesture {
+                        DispatchQueue.main.async {
+                            selectedNote = note
+                            showingNoteEditor = true
+                        }
+                    }
+            }
+        }
+        .padding()
+    }
+}
+
+// MARK: - Uniform Note Card (Grid)
+struct UniformNoteCard: View {
+    @Environment(\.appTheme) private var theme
+    let note: Note
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Header
+            NoteCardHeader(note: note)
+            
+            // Title (flexible height)
+            Text(note.title.isEmpty ? "Untitled" : note.title)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .lineLimit(2)
+                .foregroundColor(theme.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            // Content preview (flexible height)
+            Text(note.content.isEmpty ? "No content" : note.content)
+                .font(.body)
+                .lineLimit(2)
+                .foregroundColor(theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Spacer(minLength: 4)
+            
+            // Bottom info
+            NoteCardFooter(note: note)
+        }
+        .padding(10)
+        .frame(minHeight: 160, maxHeight: 200) // Flexible height with constraints
+        .background(theme.cardBackground)
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
+    }
+}
+
+// MARK: - Note List Row
+struct NoteListRow: View {
+    @Environment(\.appTheme) private var theme
+    let note: Note
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Left content
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(note.title.isEmpty ? "Untitled" : note.title)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .foregroundColor(theme.textPrimary)
+                    
+                    Spacer()
+                    
+                    Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundColor(theme.textSecondary)
+                }
+                
+                if !note.content.isEmpty {
+                    Text(note.content)
+                        .font(.body)
+                        .lineLimit(2)
+                        .foregroundColor(theme.textSecondary)
+                }
+                
+                HStack {
+                    if let category = note.category {
+                        CategoryTag(category: category)
+                    }
+                    
+                    if !note.tags.isEmpty {
+                        Text("#\(note.tags.prefix(2).joined(separator: " #"))")
+                            .font(.caption)
+                            .foregroundColor(theme.primary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    
+                    Spacer()
+                    
+                    NoteIndicators(note: note)
+                }
+            }
+        }
+        .padding(12)
+        .background(theme.cardBackground)
+        .cornerRadius(8)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+// MARK: - Reusable Components
+struct NoteCardHeader: View {
+    @Environment(\.appTheme) private var theme
+    let note: Note
+    
+    var body: some View {
+        HStack {
+            if let category = note.category {
+                CategoryTag(category: category)
+            }
+            
+            Spacer()
+            
+            Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
+                .font(.caption)
+                .foregroundColor(theme.textSecondary)
         }
     }
 }
 
-// MARK: - Color Extension
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (1, 1, 1, 0)
+struct NoteCardFooter: View {
+    @Environment(\.appTheme) private var theme
+    let note: Note
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            // Tags (max 2 for cards to prevent overflow)
+            if !note.tags.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(note.tags.prefix(2), id: \.self) { tag in
+                        Text("#\(tag)")
+                            .font(.caption2)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(theme.primary.opacity(0.1))
+                            .foregroundColor(theme.primary)
+                            .cornerRadius(3)
+                    }
+                    
+                    if note.tags.count > 2 {
+                        Text("+\(note.tags.count - 2)")
+                            .font(.caption2)
+                            .foregroundColor(theme.textSecondary)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            
+            // Indicators
+            NoteIndicators(note: note)
         }
-
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue:  Double(b) / 255,
-            opacity: Double(a) / 255
-        )
     }
 }
+
+struct CategoryTag: View {
+    @Environment(\.appTheme) private var theme
+    let category: Category
+    
+    var body: some View {
+        Text(category.name)
+            .font(.caption)
+            .fontWeight(.medium)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(hex: category.color).opacity(0.2))
+            .foregroundColor(Color(hex: category.color))
+            .cornerRadius(6)
+    }
+}
+
+struct NoteIndicators: View {
+    @Environment(\.appTheme) private var theme
+    let note: Note
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            if note.audioURL != nil {
+                HStack(spacing: 2) {
+                    Image(systemName: "waveform")
+                        .font(.caption2)
+                        .foregroundColor(theme.warning)
+                    Text("Audio")
+                        .font(.caption2)
+                        .foregroundColor(theme.warning)
+                }
+            }
+            
+            if !note.attachments.isEmpty {
+                HStack(spacing: 2) {
+                    Image(systemName: "paperclip")
+                        .font(.caption2)
+                        .foregroundColor(theme.textSecondary)
+                    Text("\(note.attachments.count)")
+                        .font(.caption2)
+                        .foregroundColor(theme.textSecondary)
+                }
+            }
+            
+            if !note.actionItems.isEmpty {
+                HStack(spacing: 2) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.caption2)
+                        .foregroundColor(theme.success)
+                    Text("\(note.actionItems.count)")
+                        .font(.caption2)
+                        .foregroundColor(theme.success)
+                }
+            }
+            
+            if note.aiSummary != nil {
+                HStack(spacing: 2) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.caption2)
+                        .foregroundColor(theme.primary)
+                    Text("AI")
+                        .font(.caption2)
+                        .foregroundColor(theme.primary)
+                }
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Empty State
+struct EmptyNotesView: View {
+    @Environment(\.appTheme) private var theme
+    @Binding var showingNoteEditor: Bool
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Image(systemName: "note.text")
+                .font(.system(size: 80))
+                .foregroundColor(theme.textTertiary)
+            
+            VStack(spacing: 8) {
+                Text("No Notes Yet")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(theme.textPrimary)
+                
+                Text("Create your first note or record a voice memo")
+                    .font(.body)
+                    .foregroundColor(theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+            
+            Button("Create Note") {
+                showingNoteEditor = true
+            }
+            .buttonStyle(.borderedProminent)
+            .accentColor(theme.primary)
+            .padding(.top)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 
 #Preview {
     NotesListView()

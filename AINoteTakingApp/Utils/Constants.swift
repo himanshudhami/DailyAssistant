@@ -266,7 +266,7 @@ extension EnvironmentValues {
 class AppState: ObservableObject {
     @Published var hasCompletedOnboarding: Bool
     @Published var isFirstLaunch: Bool
-    @Published var currentTheme: Theme = .system
+    @Published var currentTheme: AppTheme = .system
     
     init() {
         let onboardingCompleted = UserDefaults.standard.bool(forKey: AppConstants.UserDefaultsKeys.hasCompletedOnboarding)
@@ -281,7 +281,7 @@ class AppState: ObservableObject {
     }
 }
 
-enum Theme: String, CaseIterable {
+enum AppTheme: String, CaseIterable {
     case light = "Light"
     case dark = "Dark"
     case system = "System"
@@ -291,6 +291,115 @@ enum Theme: String, CaseIterable {
         case .light: return .light
         case .dark: return .dark
         case .system: return nil
+        }
+    }
+}
+
+// MARK: - Theme System
+protocol AppThemeProtocol {
+    var primary: Color { get }
+    var secondary: Color { get }
+    var accent: Color { get }
+    var background: Color { get }
+    var surface: Color { get }
+    var success: Color { get }
+    var warning: Color { get }
+    var error: Color { get }
+    var info: Color { get }
+    var textPrimary: Color { get }
+    var textSecondary: Color { get }
+    var textTertiary: Color { get }
+    var cardBackground: Color { get }
+    var sectionBackground: Color { get }
+    var separator: Color { get }
+}
+
+struct DefaultAppTheme: AppThemeProtocol {
+    let primary = Color.blue
+    let secondary = Color.gray
+    let accent = Color.blue
+    let background = Color(.systemBackground)
+    let surface = Color(.secondarySystemBackground)
+    let success = Color.green
+    let warning = Color.orange
+    let error = Color.red
+    let info = Color.blue
+    let textPrimary = Color.primary
+    let textSecondary = Color.secondary
+    let textTertiary = Color(.tertiaryLabel)
+    let cardBackground = Color(.systemBackground)
+    let sectionBackground = Color(.systemGray6)
+    let separator = Color(.separator)
+}
+
+@MainActor
+class AppThemeManager: ObservableObject {
+    @Published var currentTheme: DefaultAppTheme = DefaultAppTheme()
+    
+    init() {
+        // For now, just use the default theme
+    }
+}
+
+// MARK: - Theme Environment Key
+private struct AppThemeEnvironmentKey: EnvironmentKey {
+    static let defaultValue = DefaultAppTheme()
+}
+
+extension EnvironmentValues {
+    var appTheme: DefaultAppTheme {
+        get { self[AppThemeEnvironmentKey.self] }
+        set { self[AppThemeEnvironmentKey.self] = newValue }
+    }
+}
+
+// MARK: - Color Extension for Hex
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
+// MARK: - Theme Extensions
+extension Category {
+    func themedColor(for theme: DefaultAppTheme) -> Color {
+        // For now, just use the original color
+        return Color(hex: color)
+    }
+}
+
+extension Priority {
+    func themedColor(for theme: DefaultAppTheme) -> Color {
+        switch self {
+        case .low:
+            return theme.success
+        case .medium:
+            return theme.warning
+        case .high:
+            return theme.error
+        case .urgent:
+            return theme.accent
         }
     }
 }

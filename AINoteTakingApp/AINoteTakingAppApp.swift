@@ -12,12 +12,15 @@ import CoreData
 struct AINoteTakingAppApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var appState = AppState()
+    @StateObject private var themeManager = AppThemeManager()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environmentObject(appState)
+                .environmentObject(themeManager)
+                .environment(\.appTheme, themeManager.currentTheme)
                 .preferredColorScheme(appState.currentTheme.colorScheme)
         }
     }

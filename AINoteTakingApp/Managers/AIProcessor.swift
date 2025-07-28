@@ -44,7 +44,7 @@ class AIProcessor: ObservableObject {
         static let maxSummaryLength = 200
         static let maxKeyPoints = 5
         static let maxActionItems = 10
-        static let maxSuggestedTags = 8
+        static let maxSuggestedTags = 5  // Restricted to max 5 tags
         static let similarityThreshold = 0.3
     }
     
