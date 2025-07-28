@@ -1,0 +1,446 @@
+//
+//  NoteEditorViewModel.swift
+//  AINoteTakingApp
+//
+//  Created by AI Assistant on 2024-01-01.
+//
+
+import Foundation
+import UIKit
+import CoreData
+import Combine
+
+@MainActor
+class NoteEditorViewModel: ObservableObject {
+    
+    // MARK: - Published Properties
+    @Published var title = ""
+    @Published var content = ""
+    @Published var tags: [String] = []
+    @Published var selectedCategory: Category?
+    @Published var attachments: [Attachment] = []
+    @Published var actionItems: [ActionItem] = []
+    @Published var audioURL: URL?
+    @Published var transcript: String?
+    @Published var aiSummary: String?
+    @Published var keyPoints: [String] = []
+    
+    @Published var isProcessing = false
+    @Published var isSaving = false
+    @Published var errorMessage: String?
+    
+    // MARK: - Computed Properties
+    var isNewNote: Bool {
+        return originalNote == nil
+    }
+    
+    var hasContent: Bool {
+        return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+               !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+               audioURL != nil ||
+               !attachments.isEmpty
+    }
+    
+    var hasChanges: Bool {
+        guard let originalNote = originalNote else { return hasContent }
+        
+        return title != originalNote.title ||
+               content != originalNote.content ||
+               tags != originalNote.tags ||
+               selectedCategory?.id != originalNote.category?.id ||
+               attachments.count != originalNote.attachments.count ||
+               audioURL != originalNote.audioURL ||
+               transcript != originalNote.transcript
+    }
+    
+    // MARK: - Private Properties
+    private let originalNote: Note?
+    private let persistenceController = PersistenceController.shared
+    private let aiProcessor = AIProcessor()
+    private let fileImportManager = FileImportManager()
+    private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Initialization
+    init(note: Note? = nil) {
+        self.originalNote = note
+        
+        if let note = note {
+            loadNoteData(note)
+        }
+        
+        setupAutoSave()
+    }
+    
+    private func loadNoteData(_ note: Note) {
+        title = note.title
+        content = note.content
+        tags = note.tags
+        selectedCategory = note.category
+        attachments = note.attachments
+        actionItems = note.actionItems
+        audioURL = note.audioURL
+        transcript = note.transcript
+        aiSummary = note.aiSummary
+        keyPoints = note.keyPoints
+    }
+    
+    private func setupAutoSave() {
+        // Disabled auto-save to prevent duplicates
+        // Users must manually save notes using the save button
+    }
+    
+    // MARK: - Save Operations
+    func saveNote() async {
+        guard hasContent else { return }
+        
+        isSaving = true
+        errorMessage = nil
+        
+        do {
+            let noteToSave = createNoteFromCurrentData()
+            try await saveNoteToCoreData(noteToSave)
+            
+            await MainActor.run {
+                self.isSaving = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to save note: \(error.localizedDescription)"
+                self.isSaving = false
+            }
+        }
+    }
+    
+    private func autoSave() async {
+        guard hasChanges && hasContent && !isSaving else { return }
+        
+        do {
+            let noteToSave = createNoteFromCurrentData()
+            try await saveNoteToCoreData(noteToSave)
+        } catch {
+            // Silent auto-save failure
+            print("Auto-save failed: \(error.localizedDescription)")
+        }
+    }
+    
+    private func createNoteFromCurrentData() -> Note {
+        let noteId = originalNote?.id ?? UUID()
+        let createdDate = originalNote?.createdDate ?? Date()
+        
+        return Note(
+            id: noteId,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            content: content.trimmingCharacters(in: .whitespacesAndNewlines),
+            audioURL: audioURL,
+            attachments: attachments,
+            tags: tags,
+            category: selectedCategory,
+            createdDate: createdDate,
+            modifiedDate: Date(),
+            aiSummary: aiSummary,
+            keyPoints: keyPoints,
+            actionItems: actionItems,
+            transcript: transcript
+        )
+    }
+    
+    private func saveNoteToCoreData(_ note: Note) async throws {
+        return try await withCheckedThrowingContinuation { continuation in
+            let context = persistenceController.container.viewContext
+            
+            // Find existing note or create new one
+            let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", note.id as CVarArg)
+            
+            do {
+                let existingEntities = try context.fetch(request)
+                let noteEntity = existingEntities.first ?? NoteEntity(context: context)
+                
+                note.updateEntity(noteEntity)
+                
+                // Handle category relationship
+                if let category = note.category {
+                    let categoryRequest: NSFetchRequest<CategoryEntity> = CategoryEntity.fetchRequest()
+                    categoryRequest.predicate = NSPredicate(format: "id == %@", category.id as CVarArg)
+                    
+                    if let categoryEntity = try context.fetch(categoryRequest).first {
+                        noteEntity.category = categoryEntity
+                    } else {
+                        // Create new category if it doesn't exist
+                        let newCategoryEntity = CategoryEntity(context: context)
+                        category.updateEntity(newCategoryEntity)
+                        noteEntity.category = newCategoryEntity
+                    }
+                }
+                
+                // Handle attachments
+                // Remove existing attachments
+                if let existingAttachments = noteEntity.attachments {
+                    for attachment in existingAttachments {
+                        context.delete(attachment as! NSManagedObject)
+                    }
+                }
+                
+                // Add current attachments
+                for attachment in note.attachments {
+                    let attachmentEntity = AttachmentEntity(context: context)
+                    attachment.updateEntity(attachmentEntity)
+                    noteEntity.addToAttachments(attachmentEntity)
+                }
+                
+                // Handle action items
+                // Remove existing action items
+                if let existingActionItems = noteEntity.actionItems {
+                    for actionItem in existingActionItems {
+                        context.delete(actionItem as! NSManagedObject)
+                    }
+                }
+                
+                // Add current action items
+                for actionItem in note.actionItems {
+                    let actionItemEntity = ActionItemEntity(context: context)
+                    actionItem.updateEntity(actionItemEntity)
+                    noteEntity.addToActionItems(actionItemEntity)
+                }
+                
+                try context.save()
+                continuation.resume()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    // MARK: - AI Processing
+    func processWithAI() async {
+        guard hasContent else { return }
+        
+        isProcessing = true
+        errorMessage = nil
+        
+        do {
+            let fullContent = content + " " + (transcript ?? "")
+            let processedContent = await aiProcessor.processContent(fullContent)
+            
+            await MainActor.run {
+                self.applyAIProcessing(processedContent)
+                self.isProcessing = false
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "AI processing failed: \(error.localizedDescription)"
+                self.isProcessing = false
+            }
+        }
+    }
+    
+    func applyAIProcessing(_ processedContent: ProcessedContent) {
+        // Apply AI suggestions
+        if aiSummary?.isEmpty ?? true {
+            aiSummary = processedContent.summary
+        }
+        
+        if keyPoints.isEmpty {
+            keyPoints = processedContent.keyPoints
+        }
+        
+        // Merge action items (avoid duplicates)
+        let newActionItems = processedContent.actionItems.filter { newItem in
+            !actionItems.contains { existingItem in
+                existingItem.title.lowercased() == newItem.title.lowercased()
+            }
+        }
+        actionItems.append(contentsOf: newActionItems)
+        
+        // Merge tags (avoid duplicates)
+        let newTags = processedContent.suggestedTags.filter { !tags.contains($0) }
+        tags.append(contentsOf: newTags)
+        
+        // Suggest category if none selected
+        if selectedCategory == nil {
+            selectedCategory = processedContent.suggestedCategory
+        }
+    }
+    
+    // MARK: - File Import
+    func handleFileImport(_ result: Result<[URL], Error>) async {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            
+            isProcessing = true
+            
+            do {
+                let importResult = await fileImportManager.importFile(from: url)
+                
+                await MainActor.run {
+                    if importResult.success, let attachment = importResult.attachment {
+                        self.attachments.append(attachment)
+                        
+                        // Add extracted text to content if available
+                        if let extractedText = importResult.extractedText, !extractedText.isEmpty {
+                            if !self.content.isEmpty {
+                                self.content += "\n\n"
+                            }
+                            self.content += "--- Imported from \(attachment.fileName) ---\n"
+                            self.content += extractedText
+                        }
+                    } else if let error = importResult.error {
+                        self.errorMessage = error
+                    }
+                    
+                    self.isProcessing = false
+                }
+            }
+            
+        case .failure(let error):
+            await MainActor.run {
+                self.errorMessage = "File import failed: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func handleImageImport(_ image: UIImage) async {
+        isProcessing = true
+        
+        do {
+            // Save image to documents directory
+            let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let attachmentsDir = documentsDir.appendingPathComponent("Attachments")
+            let imageURL = attachmentsDir.appendingPathComponent("\(UUID().uuidString).jpg")
+            
+            if let imageData = image.jpegData(compressionQuality: 0.8) {
+                try imageData.write(to: imageURL)
+                
+                // Create attachment
+                let attachment = Attachment(
+                    fileName: imageURL.lastPathComponent,
+                    fileExtension: "jpg",
+                    mimeType: "image/jpeg",
+                    fileSize: Int64(imageData.count),
+                    localURL: imageURL,
+                    thumbnailData: image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.8),
+                    type: .image
+                )
+                
+                // Perform OCR
+                let extractedText = try await fileImportManager.performOCR(on: imageURL)
+                
+                await MainActor.run {
+                    self.attachments.append(attachment)
+                    
+                    // Add extracted text to content if available
+                    if !extractedText.isEmpty {
+                        if !self.content.isEmpty {
+                            self.content += "\n\n"
+                        }
+                        self.content += "--- Text from image ---\n"
+                        self.content += extractedText
+                    }
+                    
+                    self.isProcessing = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Image import failed: \(error.localizedDescription)"
+                self.isProcessing = false
+            }
+        }
+    }
+    
+    // MARK: - Attachment Management
+    func removeAttachment(_ attachment: Attachment) {
+        attachments.removeAll { $0.id == attachment.id }
+        
+        // Delete file from disk
+        do {
+            try fileImportManager.deleteAttachment(attachment)
+        } catch {
+            errorMessage = "Failed to delete attachment file: \(error.localizedDescription)"
+        }
+    }
+    
+    // MARK: - Action Item Management
+    func addActionItem(_ title: String, priority: Priority = .medium) {
+        let actionItem = ActionItem(title: title, priority: priority)
+        actionItems.append(actionItem)
+    }
+    
+    func removeActionItem(_ actionItem: ActionItem) {
+        actionItems.removeAll { $0.id == actionItem.id }
+    }
+    
+    func toggleActionItemCompletion(_ actionItem: ActionItem) {
+        if let index = actionItems.firstIndex(where: { $0.id == actionItem.id }) {
+            actionItems[index].completed.toggle()
+        }
+    }
+    
+    // MARK: - Tag Management
+    func addTag(_ tag: String) {
+        let trimmedTag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTag.isEmpty && !tags.contains(trimmedTag) {
+            tags.append(trimmedTag)
+        }
+    }
+    
+    func removeTag(_ tag: String) {
+        tags.removeAll { $0 == tag }
+    }
+    
+    // MARK: - Validation
+    func validateNote() -> [String] {
+        var errors: [String] = []
+        
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+           content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+           audioURL == nil &&
+           attachments.isEmpty {
+            errors.append("Note must have at least a title, content, audio, or attachments")
+        }
+        
+        if title.count > 200 {
+            errors.append("Title must be less than 200 characters")
+        }
+        
+        if content.count > 50000 {
+            errors.append("Content must be less than 50,000 characters")
+        }
+        
+        if tags.count > 20 {
+            errors.append("Maximum 20 tags allowed")
+        }
+        
+        return errors
+    }
+    
+    // MARK: - Cleanup
+    func discardChanges() {
+        if let originalNote = originalNote {
+            loadNoteData(originalNote)
+        } else {
+            // Clear all fields for new note
+            title = ""
+            content = ""
+            tags = []
+            selectedCategory = nil
+            attachments = []
+            actionItems = []
+            audioURL = nil
+            transcript = nil
+            aiSummary = nil
+            keyPoints = []
+        }
+    }
+}
+
+// MARK: - UIImage Extension for NoteEditorViewModel
+private extension UIImage {
+    func resizedForEditor(to size: CGSize) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+}

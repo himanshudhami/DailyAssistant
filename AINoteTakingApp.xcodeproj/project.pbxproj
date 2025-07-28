@@ -1,0 +1,477 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1234567890123456789001 /* AINoteTakingAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789002 /* AINoteTakingAppApp.swift */; };
+		A1234567890123456789005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789006 /* Assets.xcassets */; };
+		A1234567890123456789007 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789008 /* Preview Assets.xcassets */; };
+		A1234567890123456789009 /* DataModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789010 /* DataModel.xcdatamodeld */; };
+		C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */; };
+		C681F37B2E37A803000A7FB3 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36B2E37A803000A7FB3 /* Constants.swift */; };
+		C681F37D2E37A803000A7FB3 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3652E37A803000A7FB3 /* AudioManager.swift */; };
+		C681F37E2E37A803000A7FB3 /* NotesListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */; };
+		C681F37F2E37A803000A7FB3 /* PermissionsOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */; };
+		C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3722E37A803000A7FB3 /* AIAssistantView.swift */; };
+		C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3732E37A803000A7FB3 /* ContentView.swift */; };
+		C681F3822E37A803000A7FB3 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3692E37A803000A7FB3 /* Note.swift */; };
+		C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */; };
+		C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3662E37A803000A7FB3 /* FileImportManager.swift */; };
+		C681F3852E37A803000A7FB3 /* NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3742E37A803000A7FB3 /* NoteEditorView.swift */; };
+		C681F3862E37A803000A7FB3 /* AIProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3642E37A803000A7FB3 /* AIProcessor.swift */; };
+		C681F3872E37A803000A7FB3 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36C2E37A803000A7FB3 /* PermissionManager.swift */; };
+		C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3672E37A803000A7FB3 /* SecurityManager.swift */; };
+		C681F3892E37A803000A7FB3 /* SystemIntegrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36D2E37A803000A7FB3 /* SystemIntegrations.swift */; };
+		C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3752E37A803000A7FB3 /* NotesListView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A1234567890123456789002 /* AINoteTakingAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AINoteTakingAppApp.swift; sourceTree = "<group>"; };
+		A1234567890123456789006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1234567890123456789008 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		A1234567890123456789011 /* DataModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = DataModel.xcdatamodel; sourceTree = "<group>"; };
+		A1234567890123456789012 /* AINoteTakingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AINoteTakingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1234567890123456789013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C681F3642E37A803000A7FB3 /* AIProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProcessor.swift; sourceTree = "<group>"; };
+		C681F3652E37A803000A7FB3 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
+		C681F3662E37A803000A7FB3 /* FileImportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileImportManager.swift; sourceTree = "<group>"; };
+		C681F3672E37A803000A7FB3 /* SecurityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityManager.swift; sourceTree = "<group>"; };
+		C681F3692E37A803000A7FB3 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
+		C681F36B2E37A803000A7FB3 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		C681F36C2E37A803000A7FB3 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
+		C681F36D2E37A803000A7FB3 /* SystemIntegrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemIntegrations.swift; sourceTree = "<group>"; };
+		C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorViewModel.swift; sourceTree = "<group>"; };
+		C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListViewModel.swift; sourceTree = "<group>"; };
+		C681F3722E37A803000A7FB3 /* AIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
+		C681F3732E37A803000A7FB3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		C681F3742E37A803000A7FB3 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
+		C681F3752E37A803000A7FB3 /* NotesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListView.swift; sourceTree = "<group>"; };
+		C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsOnboardingView.swift; sourceTree = "<group>"; };
+		C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorderView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1234567890123456789014 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1234567890123456789015 = {
+			isa = PBXGroup;
+			children = (
+				A1234567890123456789016 /* AINoteTakingApp */,
+				A1234567890123456789017 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1234567890123456789016 /* AINoteTakingApp */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890123456789002 /* AINoteTakingAppApp.swift */,
+				C681F3782E37A803000A7FB3 /* Views */,
+				C681F3712E37A803000A7FB3 /* ViewModels */,
+				C681F36A2E37A803000A7FB3 /* Models */,
+				C681F3682E37A803000A7FB3 /* Managers */,
+				C681F36E2E37A803000A7FB3 /* Utils */,
+				A1234567890123456789006 /* Assets.xcassets */,
+				A1234567890123456789013 /* Info.plist */,
+				A1234567890123456789010 /* DataModel.xcdatamodeld */,
+				A1234567890123456789023 /* Preview Content */,
+			);
+			path = AINoteTakingApp;
+			sourceTree = "<group>";
+		};
+		A1234567890123456789017 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890123456789012 /* AINoteTakingApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+
+		A1234567890123456789023 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				A1234567890123456789008 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		C681F3682E37A803000A7FB3 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				C681F3642E37A803000A7FB3 /* AIProcessor.swift */,
+				C681F3652E37A803000A7FB3 /* AudioManager.swift */,
+				C681F3662E37A803000A7FB3 /* FileImportManager.swift */,
+				C681F3672E37A803000A7FB3 /* SecurityManager.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		C681F36A2E37A803000A7FB3 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				C681F3692E37A803000A7FB3 /* Note.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C681F36E2E37A803000A7FB3 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				C681F36B2E37A803000A7FB3 /* Constants.swift */,
+				C681F36C2E37A803000A7FB3 /* PermissionManager.swift */,
+				C681F36D2E37A803000A7FB3 /* SystemIntegrations.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		C681F3712E37A803000A7FB3 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */,
+				C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		C681F3782E37A803000A7FB3 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				C681F3722E37A803000A7FB3 /* AIAssistantView.swift */,
+				C681F3732E37A803000A7FB3 /* ContentView.swift */,
+				C681F3742E37A803000A7FB3 /* NoteEditorView.swift */,
+				C681F3752E37A803000A7FB3 /* NotesListView.swift */,
+				C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */,
+				C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1234567890123456789024 /* AINoteTakingApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1234567890123456789025 /* Build configuration list for PBXNativeTarget "AINoteTakingApp" */;
+			buildPhases = (
+				A1234567890123456789026 /* Sources */,
+				A1234567890123456789014 /* Frameworks */,
+				A1234567890123456789027 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AINoteTakingApp;
+			productName = AINoteTakingApp;
+			productReference = A1234567890123456789012 /* AINoteTakingApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1234567890123456789028 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A1234567890123456789024 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A1234567890123456789029 /* Build configuration list for PBXProject "AINoteTakingApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1234567890123456789015;
+			productRefGroup = A1234567890123456789017 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1234567890123456789024 /* AINoteTakingApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1234567890123456789027 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1234567890123456789007 /* Preview Assets.xcassets in Resources */,
+				A1234567890123456789005 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1234567890123456789026 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1234567890123456789001 /* AINoteTakingAppApp.swift in Sources */,
+				A1234567890123456789009 /* DataModel.xcdatamodeld in Sources */,
+				C681F3822E37A803000A7FB3 /* Note.swift in Sources */,
+				C681F37D2E37A803000A7FB3 /* AudioManager.swift in Sources */,
+				C681F3862E37A803000A7FB3 /* AIProcessor.swift in Sources */,
+				C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */,
+				C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */,
+				C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */,
+				C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */,
+				C681F3852E37A803000A7FB3 /* NoteEditorView.swift in Sources */,
+				C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */,
+				C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */,
+				C681F37E2E37A803000A7FB3 /* NotesListViewModel.swift in Sources */,
+				C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */,
+				C681F3872E37A803000A7FB3 /* PermissionManager.swift in Sources */,
+				C681F37F2E37A803000A7FB3 /* PermissionsOnboardingView.swift in Sources */,
+				C681F37B2E37A803000A7FB3 /* Constants.swift in Sources */,
+				C681F3892E37A803000A7FB3 /* SystemIntegrations.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1234567890123456789030 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1234567890123456789031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"AINoteTakingApp/Preview Content\"";
+				DEVELOPMENT_TEAM = 46TQGQG9PH;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AINoteTakingApp/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture images for notes.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record voice notes.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe voice notes.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ainotetaking.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1234567890123456789032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A1234567890123456789033 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"AINoteTakingApp/Preview Content\"";
+				DEVELOPMENT_TEAM = 46TQGQG9PH;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AINoteTakingApp/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture images for notes.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record voice notes.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses speech recognition to transcribe voice notes.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ainotetaking.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1234567890123456789025 /* Build configuration list for PBXNativeTarget "AINoteTakingApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1234567890123456789031 /* Debug */,
+				A1234567890123456789033 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1234567890123456789029 /* Build configuration list for PBXProject "AINoteTakingApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1234567890123456789030 /* Debug */,
+				A1234567890123456789032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		A1234567890123456789010 /* DataModel.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				A1234567890123456789011 /* DataModel.xcdatamodel */,
+			);
+			currentVersion = A1234567890123456789011 /* DataModel.xcdatamodel */;
+			path = DataModel.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
+	};
+	rootObject = A1234567890123456789028 /* Project object */;
+}

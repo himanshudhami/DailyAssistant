@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="22225" systemVersion="23A344" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="ActionItemEntity" representedClassName="ActionItemEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="completed" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="priority" optional="YES" attributeType="Integer 16" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <relationship name="note" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="NoteEntity" inverseName="actionItems" inverseEntity="NoteEntity"/>
+    </entity>
+    <entity name="AttachmentEntity" representedClassName="AttachmentEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fileExtension" optional="YES" attributeType="String"/>
+        <attribute name="fileName" optional="YES" attributeType="String"/>
+        <attribute name="fileSize" optional="YES" attributeType="Integer 64" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="localURL" optional="YES" attributeType="URI"/>
+        <attribute name="mimeType" optional="YES" attributeType="String"/>
+        <attribute name="thumbnailData" optional="YES" attributeType="Binary"/>
+        <attribute name="type" optional="YES" attributeType="String"/>
+        <relationship name="note" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="NoteEntity" inverseName="attachments" inverseEntity="NoteEntity"/>
+    </entity>
+    <entity name="CategoryEntity" representedClassName="CategoryEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="color" optional="YES" attributeType="String"/>
+        <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 16" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="notes" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="NoteEntity" inverseName="category" inverseEntity="NoteEntity"/>
+    </entity>
+    <entity name="NoteEntity" representedClassName="NoteEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="aiSummary" optional="YES" attributeType="String"/>
+        <attribute name="audioURL" optional="YES" attributeType="URI"/>
+        <attribute name="content" optional="YES" attributeType="String"/>
+        <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="keyPoints" optional="YES" attributeType="String"/>
+        <attribute name="modifiedDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="tags" optional="YES" attributeType="String"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="transcript" optional="YES" attributeType="String"/>
+        <relationship name="actionItems" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ActionItemEntity" inverseName="note" inverseEntity="ActionItemEntity"/>
+        <relationship name="attachments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="AttachmentEntity" inverseName="note" inverseEntity="AttachmentEntity"/>
+        <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CategoryEntity" inverseName="notes" inverseEntity="CategoryEntity"/>
+    </entity>
+</model>
