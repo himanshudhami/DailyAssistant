@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import Speech
+import AVFoundation
 
 // MARK: - AI Action Types
 enum AIAction {
@@ -67,6 +69,20 @@ struct AIAssistantView: View {
     @State private var showingNoteEditor = false
     @State private var selectedNoteForEditing: Note?
     @State private var newNoteTitle = ""
+    @State private var showingSpeechPermissionAlert = false
+    @State private var showingSpeechUnavailableAlert = false
+    @State private var showingRecordingErrorAlert = false
+    @State private var recordingError: Error?
+    
+    // Voice recording state
+    @State private var isRecording = false
+    @State private var justFinishedRecording = false
+    @State private var finalTranscription = ""
+    @State private var speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    @State private var recognitionTask: SFSpeechRecognitionTask?
+    @State private var audioEngine = AVAudioEngine()
+    @State private var speechAuthorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
 
     var body: some View {
         NavigationView {
@@ -102,7 +118,10 @@ struct AIAssistantView: View {
                 ChatInputView(
                     inputText: $inputText,
                     isProcessing: isProcessing,
-                    onSend: sendMessage
+                    isRecording: isRecording,
+                    justFinishedRecording: justFinishedRecording,
+                    onSend: sendMessage,
+                    onVoiceToggle: toggleVoiceRecording
                 )
             }
             .navigationTitle("AI Assistant")
@@ -121,6 +140,8 @@ struct AIAssistantView: View {
                 }
                 // Load notes when view appears
                 notesViewModel.loadNotes()
+                // Setup speech recognition
+                setupSpeechRecognition()
             }
             .alert("Clear Conversation", isPresented: $showingClearAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -129,6 +150,26 @@ struct AIAssistantView: View {
                 }
             } message: {
                 Text("This will clear your entire conversation with the AI assistant. This action cannot be undone.")
+            }
+            .alert("Speech Recognition Permission", isPresented: $showingSpeechPermissionAlert) {
+                Button("Settings") {
+                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(settingsUrl)
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Please enable speech recognition in Settings > Privacy & Security > Speech Recognition to use voice input.")
+            }
+            .alert("Speech Recognition Unavailable", isPresented: $showingSpeechUnavailableAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Speech recognition is not available on this device or language.")
+            }
+            .alert("Recording Error", isPresented: $showingRecordingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text("There was an error with voice recording: \(recordingError?.localizedDescription ?? "Unknown error")")
             }
             .sheet(isPresented: $showingNoteEditor) {
                 if let note = selectedNoteForEditing {
@@ -184,6 +225,7 @@ struct AIAssistantView: View {
         let messageToProcess = inputText
         inputText = ""
         isProcessing = true
+        justFinishedRecording = false // Reset the state
         
         Task {
             let (response, actions, relatedNotes) = await processUserMessage(messageToProcess)
@@ -198,6 +240,42 @@ struct AIAssistantView: View {
                 )
                 messages.append(assistantMessage)
                 isProcessing = false
+            }
+        }
+    }
+    
+    private func sendVoiceMessage(_ text: String) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        print("Creating voice message with text: '\(text)'") // Debug log
+        
+        let userMessage = ChatMessage(
+            content: text,
+            isUser: true,
+            timestamp: Date()
+        )
+        
+        messages.append(userMessage)
+        inputText = "" // Clear the input field
+        isProcessing = true
+        justFinishedRecording = false // Reset the state
+        
+        print("Message added to conversation, processing...") // Debug log
+        
+        Task {
+            let (response, actions, relatedNotes) = await processUserMessage(text)
+
+            await MainActor.run {
+                let assistantMessage = ChatMessage(
+                    content: response,
+                    isUser: false,
+                    timestamp: Date(),
+                    actions: actions,
+                    relatedNotes: relatedNotes
+                )
+                messages.append(assistantMessage)
+                isProcessing = false
+                print("AI response added to conversation") // Debug log
             }
         }
     }
@@ -759,6 +837,167 @@ struct AIAssistantView: View {
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
+    
+    // MARK: - Speech Recognition Methods
+    private func setupSpeechRecognition() {
+        speechAuthorizationStatus = SFSpeechRecognizer.authorizationStatus()
+        
+        // Request authorization if needed
+        if speechAuthorizationStatus == .notDetermined {
+            SFSpeechRecognizer.requestAuthorization { status in
+                DispatchQueue.main.async {
+                    self.speechAuthorizationStatus = status
+                }
+            }
+        }
+    }
+    
+    private func toggleVoiceRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+    
+    private func startRecording() {
+        // Check authorization
+        guard speechAuthorizationStatus == .authorized else {
+            print("Speech recognition not authorized: \(speechAuthorizationStatus)")
+            showSpeechPermissionAlert()
+            return
+        }
+        
+        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+            print("Speech recognizer not available")
+            showSpeechUnavailableAlert()
+            return
+        }
+        
+        do {
+            // Cancel previous task
+            recognitionTask?.cancel()
+            recognitionTask = nil
+            
+            // Configure audio session
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            
+            // Create recognition request
+            recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+            
+            let inputNode = audioEngine.inputNode
+            
+            guard let recognitionRequest = recognitionRequest else {
+                fatalError("Unable to create recognition request")
+            }
+            
+            recognitionRequest.shouldReportPartialResults = true
+            
+            // Create recognition task
+            recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { result, error in
+                var isFinal = false
+                
+                if let result = result {
+                    DispatchQueue.main.async {
+                        let transcription = result.bestTranscription.formattedString
+                        self.inputText = transcription
+                        print("Speech recognition result: '\(transcription)'") // Debug log
+                        
+                        // Store final transcription
+                        if result.isFinal {
+                            self.finalTranscription = transcription
+                            print("Storing final transcription: '\(transcription)'")
+                        }
+                    }
+                    isFinal = result.isFinal
+                }
+                
+                if let error = error {
+                    print("Speech recognition error: \(error)")
+                    // Don't change recording state here - let stopRecording handle it
+                } else if isFinal {
+                    print("Speech recognition completed (final result)")
+                    // Don't change recording state here - let stopRecording handle it
+                }
+            }
+            
+            // Configure input node
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+                self.recognitionRequest?.append(buffer)
+            }
+            
+            // Start audio engine
+            audioEngine.prepare()
+            try audioEngine.start()
+            
+            isRecording = true
+            
+        } catch {
+            print("Error starting recording: \(error)")
+            isRecording = false
+            showRecordingErrorAlert(error: error)
+        }
+    }
+    
+    private func stopRecording() {
+        // Preserve the current text before cleanup
+        let currentText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("Current text before cleanup: '\(currentText)'")
+        
+        audioEngine.stop()
+        recognitionRequest?.endAudio()
+        
+        audioEngine.inputNode.removeTap(onBus: 0)
+        
+        recognitionRequest = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        isRecording = false
+        justFinishedRecording = true
+        
+        // Use final transcription or current text, whichever is better
+        let textToUse = !finalTranscription.isEmpty ? finalTranscription : currentText
+        
+        // Restore the text after cleanup
+        if !textToUse.isEmpty {
+            inputText = textToUse
+        }
+        
+        // Auto-send message if there's text
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let trimmedText = textToUse.trimmingCharacters(in: .whitespacesAndNewlines)
+            print("Attempting to send text: '\(trimmedText)'") // Debug log
+            
+            if !trimmedText.isEmpty {
+                print("Sending message automatically") // Debug log
+                self.sendVoiceMessage(trimmedText)
+            } else {
+                print("No text to send") // Debug log
+                // Reset the state if no text to send
+                self.justFinishedRecording = false
+            }
+        }
+        
+        // Reset final transcription for next recording
+        finalTranscription = ""
+    }
+    
+    // MARK: - Error Handling Methods
+    private func showSpeechPermissionAlert() {
+        showingSpeechPermissionAlert = true
+    }
+    
+    private func showSpeechUnavailableAlert() {
+        showingSpeechUnavailableAlert = true
+    }
+    
+    private func showRecordingErrorAlert(error: Error) {
+        recordingError = error
+        showingRecordingErrorAlert = true
+    }
 }
 
 struct ChatMessageView: View {
@@ -915,18 +1154,59 @@ struct TypingIndicatorView: View {
 struct ChatInputView: View {
     @Binding var inputText: String
     let isProcessing: Bool
+    let isRecording: Bool
+    let justFinishedRecording: Bool
     let onSend: () -> Void
+    let onVoiceToggle: () -> Void
     @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
         VStack(spacing: 0) {
             Divider()
             
+            // Recording indicator
+            if isRecording {
+                HStack {
+                    Image(systemName: "waveform")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                    Text("Listening...")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+            } else if justFinishedRecording && !inputText.isEmpty {
+                HStack {
+                    Image(systemName: "checkmark.circle")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                    Text("Voice message ready to send")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+            }
+            
             HStack(spacing: 12) {
-                TextField("Ask me anything...", text: $inputText, axis: .vertical)
+                // Microphone button
+                Button(action: onVoiceToggle) {
+                    Image(systemName: isRecording ? "mic.fill" : "mic")
+                        .font(.title2)
+                        .foregroundColor(isRecording ? .red : .blue)
+                        .scaleEffect(isRecording ? 1.2 : 1.0)
+                        .animation(.easeInOut(duration: 0.2), value: isRecording)
+                }
+                .disabled(isProcessing)
+                
+                TextField(isRecording ? "Listening..." : "Ask me anything...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
                     .focused($isTextFieldFocused)
+                    .disabled(isRecording)
                     .onSubmit {
                         if !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             onSend()
@@ -937,8 +1217,10 @@ struct ChatInputView: View {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                         .foregroundColor(inputText.isEmpty ? .gray : .blue)
+                        .scaleEffect(justFinishedRecording && !inputText.isEmpty ? 1.1 : 1.0)
+                        .animation(.easeInOut(duration: 0.2), value: justFinishedRecording)
                 }
-                .disabled(inputText.isEmpty || isProcessing)
+                .disabled(inputText.isEmpty || isProcessing || isRecording)
             }
             .padding()
         }
