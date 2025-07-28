@@ -18,6 +18,8 @@
 		C681F37F2E37A803000A7FB3 /* PermissionsOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */; };
 		C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3722E37A803000A7FB3 /* AIAssistantView.swift */; };
 		C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3732E37A803000A7FB3 /* ContentView.swift */; };
+		DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */; };
+		EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091A27012A9941A38EB6AA24 /* SettingsView.swift */; };
 		C681F3822E37A803000A7FB3 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3692E37A803000A7FB3 /* Note.swift */; };
 		C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */; };
 		C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3662E37A803000A7FB3 /* FileImportManager.swift */; };
@@ -52,6 +54,8 @@
 		C681F3752E37A803000A7FB3 /* NotesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListView.swift; sourceTree = "<group>"; };
 		C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsOnboardingView.swift; sourceTree = "<group>"; };
 		C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorderView.swift; sourceTree = "<group>"; };
+		1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		091A27012A9941A38EB6AA24 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -153,6 +157,8 @@
 				C681F3742E37A803000A7FB3 /* NoteEditorView.swift */,
 				C681F3752E37A803000A7FB3 /* NotesListView.swift */,
 				C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */,
+				1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */,
+				091A27012A9941A38EB6AA24 /* SettingsView.swift */,
 				C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */,
 			);
 			path = Views;
@@ -240,6 +246,8 @@
 				C681F3852E37A803000A7FB3 /* NoteEditorView.swift in Sources */,
 				C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */,
 				C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */,
+				DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */,
+				EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */,
 				C681F37E2E37A803000A7FB3 /* NotesListViewModel.swift in Sources */,
 				C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */,
 				C681F3872E37A803000A7FB3 /* PermissionManager.swift in Sources */,

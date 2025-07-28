@@ -7,12 +7,55 @@
 
 import SwiftUI
 
+// MARK: - AI Action Types
+enum AIAction {
+    case summarizeAll
+    case summarizeNote(Note)
+    case findRelated(Note)
+    case extractTasks
+    case searchNotes(String)
+    case categorizeNotes
+    case analyzeNote(Note)
+}
+
+// MARK: - AI Context Types
+enum AIContext {
+    case general
+    case noteSpecific(Note)
+    case multipleNotes([Note])
+    case search(String)
+}
+
+// MARK: - Chat Message Model
+struct ChatMessage: Identifiable {
+    let id = UUID()
+    let content: String
+    let isUser: Bool
+    let timestamp: Date
+    let actions: [AIAction]
+    let relatedNotes: [Note]
+
+    init(content: String, isUser: Bool, timestamp: Date, actions: [AIAction] = [], relatedNotes: [Note] = []) {
+        self.content = content
+        self.isUser = isUser
+        self.timestamp = timestamp
+        self.actions = actions
+        self.relatedNotes = relatedNotes
+    }
+}
+
 struct AIAssistantView: View {
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
     @State private var isProcessing = false
     @StateObject private var aiProcessor = AIProcessor()
-    
+    @EnvironmentObject var notesViewModel: NotesListViewModel
+    @State private var currentContext: AIContext = .general
+    @State private var selectedNotes: Set<Note> = []
+    @State private var showingActionSheet = false
+    @State private var pendingAction: AIAction?
+    @State private var showingClearAlert = false
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -21,7 +64,7 @@ struct AIAssistantView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(messages) { message in
-                                ChatMessageView(message: message)
+                                ChatMessageView(message: message, onActionTapped: handleActionTap)
                                     .id(message.id)
                             }
                             
@@ -49,21 +92,55 @@ struct AIAssistantView: View {
             }
             .navigationTitle("AI Assistant")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Clear") {
+                        showingClearAlert = true
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
             .onAppear {
                 if messages.isEmpty {
                     addWelcomeMessage()
                 }
+                // Load notes when view appears
+                notesViewModel.loadNotes()
+            }
+            .alert("Clear Conversation", isPresented: $showingClearAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Clear", role: .destructive) {
+                    clearConversation()
+                }
+            } message: {
+                Text("This will clear your entire conversation with the AI assistant. This action cannot be undone.")
             }
         }
     }
     
     private func addWelcomeMessage() {
+        let noteCount = notesViewModel.notes.count
+        let contextualGreeting = generateContextualGreeting(noteCount: noteCount)
+
         let welcomeMessage = ChatMessage(
-            content: "Hello! I'm your AI assistant. I can help you with:\n\n• Analyzing and summarizing your notes\n• Finding related content\n• Creating action items\n• Organizing your thoughts\n\nWhat would you like to do today?",
+            content: contextualGreeting,
             isUser: false,
-            timestamp: Date()
+            timestamp: Date(),
+            actions: [.summarizeAll, .extractTasks, .categorizeNotes]
         )
         messages.append(welcomeMessage)
+    }
+
+    private func generateContextualGreeting(noteCount: Int) -> String {
+        let baseGreeting = "Hello! I'm your AI assistant. "
+
+        if noteCount == 0 {
+            return baseGreeting + "I see you don't have any notes yet. Once you create some notes, I can help you:\n\n• Summarize and analyze content\n• Extract action items and tasks\n• Find related information\n• Organize and categorize notes\n\nStart by creating your first note, then come back to chat with me!"
+        } else if noteCount < 5 {
+            return baseGreeting + "I can see you have \(noteCount) note\(noteCount == 1 ? "" : "s"). I can help you:\n\n• Summarize your existing notes\n• Extract action items\n• Find connections between notes\n• Suggest better organization\n\nWhat would you like me to help you with?"
+        } else {
+            return baseGreeting + "I can see you have \(noteCount) notes to work with! I can help you:\n\n• Summarize all or specific notes\n• Find related content across your notes\n• Extract and organize action items\n• Categorize and tag your notes\n• Search through your content\n\nWhat would you like me to analyze today?"
+        }
     }
     
     private func sendMessage() {
@@ -81,13 +158,15 @@ struct AIAssistantView: View {
         isProcessing = true
         
         Task {
-            let response = await processUserMessage(messageToProcess)
-            
+            let (response, actions, relatedNotes) = await processUserMessage(messageToProcess)
+
             await MainActor.run {
                 let assistantMessage = ChatMessage(
                     content: response,
                     isUser: false,
-                    timestamp: Date()
+                    timestamp: Date(),
+                    actions: actions,
+                    relatedNotes: relatedNotes
                 )
                 messages.append(assistantMessage)
                 isProcessing = false
@@ -95,39 +174,297 @@ struct AIAssistantView: View {
         }
     }
     
-    private func processUserMessage(_ message: String) async -> String {
-        // Simple AI assistant responses based on keywords
+    private func processUserMessage(_ message: String) async -> (String, [AIAction], [Note]) {
         let lowercased = message.lowercased()
-        
-        if lowercased.contains("summarize") || lowercased.contains("summary") {
-            return "I can help you summarize your notes! To get started, please share the content you'd like me to summarize, or I can analyze your existing notes to find the most important points."
-        } else if lowercased.contains("organize") || lowercased.contains("category") {
-            return "I can help organize your notes by:\n\n• Suggesting categories based on content\n• Creating tags automatically\n• Grouping related notes together\n\nWould you like me to analyze your current notes and suggest an organization structure?"
+        let availableNotes = notesViewModel.notes
+
+        // Handle different types of requests with real AI functionality
+        if lowercased.contains("summarize all") || lowercased.contains("summary of all") {
+            return await handleSummarizeAllRequest(availableNotes)
+        } else if lowercased.contains("summarize") || lowercased.contains("summary") {
+            return await handleSummarizeRequest(message, notes: availableNotes)
+        } else if lowercased.contains("find") || lowercased.contains("search") {
+            return await handleSearchRequest(message, notes: availableNotes)
         } else if lowercased.contains("action") || lowercased.contains("task") || lowercased.contains("todo") {
-            return "I can extract action items from your notes! I look for phrases like:\n\n• 'Need to...'\n• 'Should...'\n• 'Must...'\n• 'Follow up on...'\n• 'Schedule...'\n\nShare some content and I'll identify actionable items for you."
-        } else if lowercased.contains("search") || lowercased.contains("find") {
-            return "I can help you find notes using natural language! Try asking:\n\n• 'Find notes about meetings'\n• 'Show me notes from last week'\n• 'Find notes with action items'\n• 'Search for notes about projects'\n\nWhat would you like to search for?"
+            return await handleActionItemsRequest(availableNotes)
+        } else if lowercased.contains("organize") || lowercased.contains("category") || lowercased.contains("categorize") {
+            return await handleOrganizeRequest(availableNotes)
+        } else if lowercased.contains("related") || lowercased.contains("connection") {
+            return await handleRelatedNotesRequest(message, notes: availableNotes)
         } else if lowercased.contains("hello") || lowercased.contains("hi") || lowercased.contains("hey") {
-            return "Hello! I'm here to help you get the most out of your notes. I can analyze content, suggest improvements, help with organization, and much more. What can I assist you with today?"
+            return await handleGreeting(availableNotes)
         } else if lowercased.contains("help") {
-            return "Here's what I can help you with:\n\n📝 **Content Analysis**\n• Summarize long notes\n• Extract key points\n• Identify action items\n\n🏷️ **Organization**\n• Suggest categories and tags\n• Find related notes\n• Create smart groupings\n\n🔍 **Search & Discovery**\n• Natural language search\n• Content recommendations\n• Note insights\n\n🎯 **Productivity**\n• Task extraction\n• Priority suggestions\n• Follow-up reminders\n\nJust ask me anything!"
+            return await handleHelpRequest(availableNotes)
         } else {
-            // For other messages, provide a general helpful response
-            return "I understand you're asking about: \"\(message)\"\n\nI'm designed to help with note-taking tasks like summarizing content, organizing notes, extracting action items, and finding information. Could you be more specific about what you'd like me to help you with?\n\nFor example:\n• 'Help me summarize this content...'\n• 'Find notes about...'\n• 'Organize my notes by...'\n• 'Extract tasks from...'"
+            return await handleGeneralQuery(message, notes: availableNotes)
         }
     }
-}
 
-struct ChatMessage: Identifiable {
-    let id = UUID()
-    let content: String
-    let isUser: Bool
-    let timestamp: Date
+    // MARK: - Conversation Management
+    private func clearConversation() {
+        messages.removeAll()
+        currentContext = .general
+        selectedNotes.removeAll()
+
+        // Add a small delay to make the clearing feel more intentional
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            addWelcomeMessage()
+        }
+    }
+
+    // MARK: - Action Handling
+    private func handleActionTap(_ action: AIAction) {
+        Task {
+            isProcessing = true
+            let (response, newActions, relatedNotes) = await processAction(action)
+
+            await MainActor.run {
+                let assistantMessage = ChatMessage(
+                    content: response,
+                    isUser: false,
+                    timestamp: Date(),
+                    actions: newActions,
+                    relatedNotes: relatedNotes
+                )
+                messages.append(assistantMessage)
+                isProcessing = false
+            }
+        }
+    }
+
+    private func processAction(_ action: AIAction) async -> (String, [AIAction], [Note]) {
+        let availableNotes = notesViewModel.notes
+
+        switch action {
+        case .summarizeAll:
+            return await handleSummarizeAllRequest(availableNotes)
+        case .summarizeNote(let note):
+            return await handleSummarizeRequest("summarize \(note.title)", notes: [note])
+        case .findRelated(let note):
+            return await handleRelatedNotesRequest("find related to \(note.title)", notes: availableNotes)
+        case .extractTasks:
+            return await handleActionItemsRequest(availableNotes)
+        case .searchNotes(let query):
+            return await handleSearchRequest("search \(query)", notes: availableNotes)
+        case .categorizeNotes:
+            return await handleOrganizeRequest(availableNotes)
+        case .analyzeNote(let note):
+            return await handleSummarizeRequest("analyze \(note.title)", notes: [note])
+        }
+    }
+
+    // MARK: - AI Request Handlers
+    private func handleSummarizeAllRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
+        guard !notes.isEmpty else {
+            return ("I don't see any notes to summarize. Create some notes first, then I can help you summarize them!", [], [])
+        }
+
+        let allContent = notes.map { note in
+            "\(note.title.isEmpty ? "Untitled" : note.title): \(note.content)"
+        }.joined(separator: "\n\n")
+
+        let summary = await aiProcessor.summarizeContent(allContent)
+        let keyPoints = await aiProcessor.extractKeyPoints(allContent)
+
+        var response = "Here's a summary of all your \(notes.count) notes:\n\n**Summary:**\n\(summary)"
+
+        if !keyPoints.isEmpty {
+            response += "\n\n**Key Points:**\n" + keyPoints.map { "• \($0)" }.joined(separator: "\n")
+        }
+
+        let actions: [AIAction] = [.extractTasks, .categorizeNotes]
+        return (response, actions, notes)
+    }
+
+    private func handleSearchRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        guard !notes.isEmpty else {
+            return ("I don't have any notes to search through. Create some notes first!", [], [])
+        }
+
+        // Extract search terms from the message
+        let searchTerms = extractSearchTerms(from: message)
+        let matchingNotes = searchNotes(searchTerms, in: notes)
+
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any notes matching '\(searchTerms.joined(separator: ", "))'. Try different keywords or create notes with that content.", [.summarizeAll], [])
+        }
+
+        let response = "I found \(matchingNotes.count) note\(matchingNotes.count == 1 ? "" : "s") matching your search:\n\n" +
+            matchingNotes.prefix(5).map { note in
+                "• **\(note.title.isEmpty ? "Untitled" : note.title)** - \(String(note.content.prefix(100)))\(note.content.count > 100 ? "..." : "")"
+            }.joined(separator: "\n")
+
+        let actions: [AIAction] = matchingNotes.count == 1 ? [.analyzeNote(matchingNotes[0])] : [.summarizeAll]
+        return (response, actions, Array(matchingNotes.prefix(10)))
+    }
+
+    private func handleActionItemsRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
+        guard !notes.isEmpty else {
+            return ("I don't have any notes to extract action items from. Create some notes first!", [], [])
+        }
+
+        var allActionItems: [ActionItem] = []
+        var notesWithTasks: [Note] = []
+
+        for note in notes {
+            let content = "\(note.title) \(note.content)"
+            let extractedItems = await aiProcessor.extractActionItems(content)
+            if !extractedItems.isEmpty {
+                allActionItems.append(contentsOf: extractedItems)
+                notesWithTasks.append(note)
+            }
+        }
+
+        if allActionItems.isEmpty {
+            return ("I couldn't find any action items in your notes. Try adding tasks with words like 'need to', 'should', 'must', or 'todo'.", [.summarizeAll], [])
+        }
+
+        let response = "I found \(allActionItems.count) action item\(allActionItems.count == 1 ? "" : "s") across \(notesWithTasks.count) note\(notesWithTasks.count == 1 ? "" : "s"):\n\n" +
+            allActionItems.prefix(10).map { item in
+                let priorityIcon = item.priority == .urgent ? "🔴" : item.priority == .high ? "🟡" : "🟢"
+                return "\(priorityIcon) \(item.title)"
+            }.joined(separator: "\n")
+
+        return (response, [.categorizeNotes], notesWithTasks)
+    }
+
+    private func handleGreeting(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let contextualGreeting = generateContextualGreeting(noteCount: notes.count)
+        let actions: [AIAction] = notes.isEmpty ? [] : [.summarizeAll, .extractTasks, .categorizeNotes]
+        return (contextualGreeting, actions, [])
+    }
+
+    private func handleGeneralQuery(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let response = "I understand you're asking about: \"\(message)\"\n\nI can help you with:\n• **Summarize** - Get summaries of your notes\n• **Search** - Find specific content\n• **Tasks** - Extract action items\n• **Organize** - Categorize and tag notes\n\nTry asking something like:\n• 'Summarize all my notes'\n• 'Find notes about meetings'\n• 'Extract all tasks'\n• 'Organize my notes'"
+
+        let actions: [AIAction] = notes.isEmpty ? [] : [.summarizeAll, .extractTasks]
+        return (response, actions, [])
+    }
+
+    // MARK: - Helper Functions
+    private func extractSearchTerms(from message: String) -> [String] {
+        let lowercased = message.lowercased()
+        let searchPrefixes = ["find", "search", "look for", "show me"]
+
+        var cleanedMessage = lowercased
+        for prefix in searchPrefixes {
+            if let range = cleanedMessage.range(of: prefix) {
+                cleanedMessage = String(cleanedMessage[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+
+        return cleanedMessage.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty && $0.count > 2 }
+    }
+
+    private func searchNotes(_ searchTerms: [String], in notes: [Note]) -> [Note] {
+        return notes.filter { note in
+            let searchableContent = "\(note.title) \(note.content) \(note.tags.joined(separator: " "))".lowercased()
+            return searchTerms.contains { term in
+                searchableContent.contains(term.lowercased())
+            }
+        }
+    }
+
+    private func handleSummarizeRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        guard !notes.isEmpty else {
+            return ("I don't have any notes to summarize. Create some notes first!", [], [])
+        }
+
+        // If user mentions specific terms, try to find relevant notes
+        let searchTerms = extractSearchTerms(from: message)
+        let relevantNotes = searchTerms.isEmpty ? notes : searchNotes(searchTerms, in: notes)
+
+        if relevantNotes.isEmpty {
+            return ("I couldn't find any notes matching those terms to summarize.", [.summarizeAll], [])
+        }
+
+        let noteToSummarize = relevantNotes.first!
+        let summary = await aiProcessor.summarizeContent(noteToSummarize.content)
+        let keyPoints = await aiProcessor.extractKeyPoints(noteToSummarize.content)
+
+        var response = "Here's a summary of '\(noteToSummarize.title.isEmpty ? "Untitled Note" : noteToSummarize.title)':\n\n**Summary:**\n\(summary)"
+
+        if !keyPoints.isEmpty {
+            response += "\n\n**Key Points:**\n" + keyPoints.map { "• \($0)" }.joined(separator: "\n")
+        }
+
+        let actions: [AIAction] = [.findRelated(noteToSummarize), .extractTasks]
+        return (response, actions, [noteToSummarize])
+    }
+
+    private func handleOrganizeRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
+        guard !notes.isEmpty else {
+            return ("I don't have any notes to organize. Create some notes first!", [], [])
+        }
+
+        // Analyze notes for categorization suggestions
+        var categoryMap: [String: [Note]] = [:]
+
+        for note in notes {
+            let processed = await aiProcessor.processContent(note.content)
+            let categoryName = processed.suggestedCategory?.name ?? "Uncategorized"
+
+            if categoryMap[categoryName] == nil {
+                categoryMap[categoryName] = []
+            }
+            categoryMap[categoryName]?.append(note)
+        }
+
+        let response = "I've analyzed your \(notes.count) notes and suggest organizing them into these categories:\n\n" +
+            categoryMap.map { category, notesInCategory in
+                "**\(category)** (\(notesInCategory.count) note\(notesInCategory.count == 1 ? "" : "s"))"
+            }.joined(separator: "\n")
+
+        return (response, [.summarizeAll], notes)
+    }
+
+    private func handleRelatedNotesRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        guard !notes.isEmpty else {
+            return ("I don't have any notes to find relationships between. Create some notes first!", [], [])
+        }
+
+        // Find the most relevant note based on the query
+        let searchTerms = extractSearchTerms(from: message)
+        let relevantNotes = searchTerms.isEmpty ? [notes.first!] : searchNotes(searchTerms, in: notes)
+
+        guard let baseNote = relevantNotes.first else {
+            return ("I couldn't find a note to base the relationship search on.", [.summarizeAll], [])
+        }
+
+        let relatedResults = await aiProcessor.findRelatedNotes(baseNote, in: notes)
+        let relatedNotes = relatedResults.map { $0.notes }.flatMap { $0 }
+
+        if relatedNotes.isEmpty {
+            return ("I couldn't find any notes related to '\(baseNote.title.isEmpty ? "that note" : baseNote.title)'.", [.summarizeAll], [baseNote])
+        }
+
+        let response = "I found \(relatedNotes.count) note\(relatedNotes.count == 1 ? "" : "s") related to '\(baseNote.title.isEmpty ? "Untitled" : baseNote.title)':\n\n" +
+            relatedNotes.prefix(5).map { note in
+                "• **\(note.title.isEmpty ? "Untitled" : note.title)**"
+            }.joined(separator: "\n")
+
+        return (response, [.summarizeAll], [baseNote] + relatedNotes)
+    }
+
+    private func handleHelpRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let response = "Here's what I can help you with:\n\n📝 **Content Analysis**\n• Summarize notes or all notes\n• Extract key points\n• Identify action items\n\n🏷️ **Organization**\n• Suggest categories and tags\n• Find related notes\n• Create smart groupings\n\n🔍 **Search & Discovery**\n• Natural language search\n• Content recommendations\n• Note insights\n\n🎯 **Productivity**\n• Task extraction\n• Priority suggestions\n• Follow-up reminders\n\nJust ask me anything! For example:\n• 'Summarize all my notes'\n• 'Find notes about meetings'\n• 'Extract all tasks'\n• 'Show me related notes'"
+
+        let actions: [AIAction] = notes.isEmpty ? [] : [.summarizeAll, .extractTasks, .categorizeNotes]
+        return (response, actions, [])
+    }
 }
 
 struct ChatMessageView: View {
     let message: ChatMessage
-    
+    let onActionTapped: ((AIAction) -> Void)?
+
+    init(message: ChatMessage, onActionTapped: ((AIAction) -> Void)? = nil) {
+        self.message = message
+        self.onActionTapped = onActionTapped
+    }
+
     var body: some View {
         HStack {
             if message.isUser {
@@ -159,15 +496,55 @@ struct ChatMessageView: View {
                             .cornerRadius(16)
                             .frame(maxWidth: 280, alignment: .leading)
                     }
-                    
+
+                    // Action buttons for AI responses
+                    if !message.actions.isEmpty {
+                        HStack(spacing: 8) {
+                            ForEach(Array(message.actions.prefix(3).enumerated()), id: \.offset) { index, action in
+                                Button(action: {
+                                    onActionTapped?(action)
+                                }) {
+                                    Text(actionButtonTitle(for: action))
+                                        .font(.caption)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color.blue.opacity(0.1))
+                                        .foregroundColor(.blue)
+                                        .cornerRadius(12)
+                                }
+                            }
+                        }
+                        .padding(.leading, 36)
+                        .padding(.top, 4)
+                    }
+
                     Text(message.timestamp, style: .time)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.leading, 36)
                 }
-                
+
                 Spacer()
             }
+        }
+    }
+
+    private func actionButtonTitle(for action: AIAction) -> String {
+        switch action {
+        case .summarizeAll:
+            return "Summarize All"
+        case .summarizeNote(_):
+            return "Summarize Note"
+        case .findRelated(_):
+            return "Find Related"
+        case .extractTasks:
+            return "Extract Tasks"
+        case .searchNotes(_):
+            return "Search"
+        case .categorizeNotes:
+            return "Categorize"
+        case .analyzeNote(_):
+            return "Analyze"
         }
     }
 }
@@ -242,424 +619,7 @@ struct ChatInputView: View {
     }
 }
 
-struct SearchView: View {
-    @State private var searchText = ""
-    @State private var searchResults: [Note] = []
-    @State private var isSearching = false
-    @State private var selectedFilters: Set<SearchFilter> = []
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Search Bar
-                SearchBar(
-                    text: $searchText,
-                    isSearching: $isSearching,
-                    onSearchChanged: performSearch
-                )
-                
-                // Filters
-                SearchFiltersView(selectedFilters: $selectedFilters) {
-                    performSearch(searchText)
-                }
-                
-                // Results
-                if isSearching {
-                    ProgressView("Searching...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if searchResults.isEmpty && !searchText.isEmpty {
-                    EmptySearchView()
-                } else if !searchResults.isEmpty {
-                    SearchResultsList(results: searchResults)
-                } else {
-                    SearchSuggestionsView(onSuggestionTapped: { suggestion in
-                        searchText = suggestion
-                        performSearch(suggestion)
-                    })
-                }
-            }
-            .navigationTitle("Search")
-            .navigationBarTitleDisplayMode(.large)
-        }
-    }
-    
-    private func performSearch(_ query: String) {
-        guard !query.isEmpty else {
-            searchResults = []
-            return
-        }
-        
-        isSearching = true
-        
-        // Simulate search delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Implement actual search logic here
-            searchResults = [] // Placeholder
-            isSearching = false
-        }
-    }
-}
-
-struct SearchBar: View {
-    @Binding var text: String
-    @Binding var isSearching: Bool
-    let onSearchChanged: (String) -> Void
-    
-    var body: some View {
-        HStack {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
-                
-                TextField("Search logs, content, tags...", text: $text)
-                    .onSubmit {
-                        onSearchChanged(text)
-                    }
-                    .onChange(of: text) { newValue in
-                        onSearchChanged(newValue)
-                    }
-                
-                if !text.isEmpty {
-                    Button("Clear") {
-                        text = ""
-                        onSearchChanged("")
-                    }
-                    .foregroundColor(.gray)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
-        }
-        .padding()
-    }
-}
-
-enum SearchFilter: String, CaseIterable {
-    case hasAudio = "Audio"
-    case hasAttachments = "Attachments"
-    case hasActionItems = "Tasks"
-    case recent = "Recent"
-    case favorites = "Favorites"
-    
-    var icon: String {
-        switch self {
-        case .hasAudio: return "waveform"
-        case .hasAttachments: return "paperclip"
-        case .hasActionItems: return "checkmark.circle"
-        case .recent: return "clock"
-        case .favorites: return "heart"
-        }
-    }
-}
-
-struct SearchFiltersView: View {
-    @Binding var selectedFilters: Set<SearchFilter>
-    let onFiltersChanged: () -> Void
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(SearchFilter.allCases, id: \.self) { filter in
-                    FilterChip(
-                        filter: filter,
-                        isSelected: selectedFilters.contains(filter)
-                    ) {
-                        if selectedFilters.contains(filter) {
-                            selectedFilters.remove(filter)
-                        } else {
-                            selectedFilters.insert(filter)
-                        }
-                        onFiltersChanged()
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-        .padding(.vertical, 8)
-    }
-}
-
-struct FilterChip: View {
-    let filter: SearchFilter
-    let isSelected: Bool
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 4) {
-                Image(systemName: filter.icon)
-                    .font(.caption)
-                Text(filter.rawValue)
-                    .font(.caption)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.blue : Color(.systemGray6))
-            .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(16)
-        }
-    }
-}
-
-struct EmptySearchView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            
-            Text("No Results Found")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Try adjusting your search terms or filters")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-        }
-        .padding()
-    }
-}
-
-struct SearchResultsList: View {
-    let results: [Note]
-    
-    var body: some View {
-        List(results) { note in
-            SearchResultRow(note: note)
-        }
-        .listStyle(.plain)
-    }
-}
-
-struct SearchResultRow: View {
-    let note: Note
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(note.title.isEmpty ? "Untitled" : note.title)
-                .font(.headline)
-                .lineLimit(1)
-            
-            if !note.content.isEmpty {
-                Text(note.content)
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-            
-            HStack {
-                Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                if note.audioURL != nil {
-                    Image(systemName: "waveform")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                
-                if !note.attachments.isEmpty {
-                    Image(systemName: "paperclip")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-struct SearchSuggestionsView: View {
-    let onSuggestionTapped: (String) -> Void
-    
-    private let suggestions = [
-        "meeting notes",
-        "action items",
-        "today",
-        "this week",
-        "important",
-        "project",
-        "ideas",
-        "tasks"
-    ]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Search Suggestions")
-                .font(.headline)
-                .padding(.horizontal)
-            
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(suggestions, id: \.self) { suggestion in
-                    Button(action: {
-                        onSuggestionTapped(suggestion)
-                    }) {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
-                            Text(suggestion)
-                                .foregroundColor(.primary)
-                            Spacer()
-                        }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                    }
-                }
-            }
-            .padding(.horizontal)
-            
-            Spacer()
-        }
-        .padding(.top)
-    }
-}
-
-struct SettingsView: View {
-    @EnvironmentObject var securityManager: SecurityManager
-    @State private var showingAbout = false
-    
-    var body: some View {
-        NavigationView {
-            List {
-                // Security Section
-                Section("Security & Privacy") {
-                    HStack {
-                        Image(systemName: "lock.shield")
-                            .foregroundColor(.blue)
-                        Text("App Lock")
-                        Spacer()
-                        Toggle("", isOn: .constant(securityManager.isAppLockEnabled))
-                            .onChange(of: securityManager.isAppLockEnabled) { newValue in
-                                if newValue {
-                                    securityManager.enableAppLock()
-                                } else {
-                                    securityManager.disableAppLock()
-                                }
-                            }
-                    }
-                    
-                    HStack {
-                        Image(systemName: securityManager.biometryType == .faceID ? "faceid" : "touchid")
-                            .foregroundColor(.green)
-                        Text("Biometric Authentication")
-                        Spacer()
-                        Text(securityManager.getBiometryTypeString())
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // AI & Processing Section
-                Section("AI & Processing") {
-                    HStack {
-                        Image(systemName: "brain.head.profile")
-                            .foregroundColor(.purple)
-                        Text("Auto-enhance Notes")
-                        Spacer()
-                        Toggle("", isOn: .constant(true))
-                    }
-                    
-                    HStack {
-                        Image(systemName: "waveform")
-                            .foregroundColor(.orange)
-                        Text("Real-time Transcription")
-                        Spacer()
-                        Toggle("", isOn: .constant(true))
-                    }
-                }
-                
-                // Storage Section
-                Section("Storage") {
-                    HStack {
-                        Image(systemName: "icloud")
-                            .foregroundColor(.blue)
-                        Text("iCloud Sync")
-                        Spacer()
-                        Toggle("", isOn: .constant(true))
-                    }
-                    
-                    HStack {
-                        Image(systemName: "externaldrive")
-                            .foregroundColor(.gray)
-                        Text("Storage Used")
-                        Spacer()
-                        Text("2.3 GB")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // About Section
-                Section("About") {
-                    Button(action: { showingAbout = true }) {
-                        HStack {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.blue)
-                            Text("About AI Note Taking")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .foregroundColor(.primary)
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
-        }
-        .sheet(isPresented: $showingAbout) {
-            AboutView()
-        }
-    }
-}
-
-struct AboutView: View {
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
-                
-                Text("AI Note Taking")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Text("Version 1.0")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-                
-                Text("An intelligent note-taking app powered by AI to help you capture, organize, and enhance your thoughts.")
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("About")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
 #Preview {
     AIAssistantView()
+        .environmentObject(NotesListViewModel())
 }
