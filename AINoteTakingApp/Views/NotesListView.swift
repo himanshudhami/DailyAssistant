@@ -46,6 +46,8 @@ struct NotesListView: View {
     @State private var selectedCategory: Category?
     @State private var sortOption: NoteSortOption = .modifiedDate
     @State private var viewMode: NotesViewMode = .grid
+    @State private var noteToDelete: Note?
+    @State private var showingDeleteAlert = false
     
     var body: some View {
         NavigationView {
@@ -67,8 +69,10 @@ struct NotesListView: View {
                         notes: viewModel.filteredNotes,
                         viewMode: viewMode,
                         selectedNote: $selectedNote,
-                        showingNoteEditor: $showingNoteEditor
+                        showingNoteEditor: $showingNoteEditor,
+                        onDeleteNote: confirmDelete
                     )
+                    .environmentObject(viewModel)
                 }
             }
             .navigationTitle("MyLogs")
@@ -118,6 +122,29 @@ struct NotesListView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NotesDidChange"))) { _ in
             viewModel.refresh()
         }
+        .alert("Delete Note", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) {
+                noteToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let note = noteToDelete {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        viewModel.deleteNote(note)
+                    }
+                }
+                noteToDelete = nil
+            }
+        } message: {
+            if let note = noteToDelete {
+                Text("Are you sure you want to delete \"\(note.title.isEmpty ? "Untitled" : note.title)\"? This action cannot be undone.")
+            }
+        }
+    }
+
+    // MARK: - Helper Methods
+    private func confirmDelete(_ note: Note) {
+        noteToDelete = note
+        showingDeleteAlert = true
     }
 }
 
@@ -242,7 +269,9 @@ struct NotesContentView: View {
     let viewMode: NotesViewMode
     @Binding var selectedNote: Note?
     @Binding var showingNoteEditor: Bool
-    
+    let onDeleteNote: (Note) -> Void
+    @EnvironmentObject var viewModel: NotesListViewModel
+
     var body: some View {
         ScrollView {
             switch viewMode {
@@ -250,14 +279,18 @@ struct NotesContentView: View {
                 NotesGridView(
                     notes: notes,
                     selectedNote: $selectedNote,
-                    showingNoteEditor: $showingNoteEditor
+                    showingNoteEditor: $showingNoteEditor,
+                    onDeleteNote: onDeleteNote
                 )
+                .environmentObject(viewModel)
             case .list:
                 NotesListContentView(
                     notes: notes,
                     selectedNote: $selectedNote,
-                    showingNoteEditor: $showingNoteEditor
+                    showingNoteEditor: $showingNoteEditor,
+                    onDeleteNote: onDeleteNote
                 )
+                .environmentObject(viewModel)
             }
         }
     }
@@ -268,12 +301,14 @@ struct NotesGridView: View {
     let notes: [Note]
     @Binding var selectedNote: Note?
     @Binding var showingNoteEditor: Bool
-    
+    let onDeleteNote: (Note) -> Void
+    @EnvironmentObject var viewModel: NotesListViewModel
+
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12)
     ]
-    
+
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             ForEach(notes) { note in
@@ -282,6 +317,16 @@ struct NotesGridView: View {
                         DispatchQueue.main.async {
                             selectedNote = note
                             showingNoteEditor = true
+                        }
+                    }
+                    .contextMenu {
+                        Button("Edit") {
+                            selectedNote = note
+                            showingNoteEditor = true
+                        }
+
+                        Button("Delete", role: .destructive) {
+                            onDeleteNote(note)
                         }
                     }
             }
@@ -295,7 +340,9 @@ struct NotesListContentView: View {
     let notes: [Note]
     @Binding var selectedNote: Note?
     @Binding var showingNoteEditor: Bool
-    
+    let onDeleteNote: (Note) -> Void
+    @EnvironmentObject var viewModel: NotesListViewModel
+
     var body: some View {
         LazyVStack(spacing: 12) {
             ForEach(notes) { note in
@@ -304,6 +351,11 @@ struct NotesListContentView: View {
                         DispatchQueue.main.async {
                             selectedNote = note
                             showingNoteEditor = true
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button("Delete", role: .destructive) {
+                            onDeleteNote(note)
                         }
                     }
             }

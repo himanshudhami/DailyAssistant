@@ -16,6 +16,15 @@ enum AIAction {
     case searchNotes(String)
     case categorizeNotes
     case analyzeNote(Note)
+    case openNote(Note)
+    case createNote(String)
+    case editNote(Note)
+    case showNotesByTag(String)
+    case showNotesByCategory(String)
+    case showRecentNotes
+    case showNotesByDate(String)
+    case deleteNote(Note)
+    case duplicateNote(Note)
 }
 
 // MARK: - AI Context Types
@@ -55,6 +64,9 @@ struct AIAssistantView: View {
     @State private var showingActionSheet = false
     @State private var pendingAction: AIAction?
     @State private var showingClearAlert = false
+    @State private var showingNoteEditor = false
+    @State private var selectedNoteForEditing: Note?
+    @State private var newNoteTitle = ""
 
     var body: some View {
         NavigationView {
@@ -81,9 +93,12 @@ struct AIAssistantView: View {
                             }
                         }
                     }
+                    .onTapGesture {
+                        dismissKeyboard()
+                    }
                 }
                 
-                // Input Area
+                // Input Area - This will stay at bottom
                 ChatInputView(
                     inputText: $inputText,
                     isProcessing: isProcessing,
@@ -114,6 +129,19 @@ struct AIAssistantView: View {
                 }
             } message: {
                 Text("This will clear your entire conversation with the AI assistant. This action cannot be undone.")
+            }
+            .sheet(isPresented: $showingNoteEditor) {
+                if let note = selectedNoteForEditing {
+                    NoteEditorView(note: note)
+                } else {
+                    NoteEditorView()
+                        .onAppear {
+                            // Set the title for new notes if provided
+                            if !newNoteTitle.isEmpty {
+                                // This would need to be handled in NoteEditorView
+                            }
+                        }
+                }
             }
         }
     }
@@ -178,8 +206,27 @@ struct AIAssistantView: View {
         let lowercased = message.lowercased()
         let availableNotes = notesViewModel.notes
 
-        // Handle different types of requests with real AI functionality
-        if lowercased.contains("summarize all") || lowercased.contains("summary of all") {
+        // Navigation and direct actions
+        if lowercased.contains("open") || lowercased.contains("show me") {
+            return await handleOpenNoteRequest(message, notes: availableNotes)
+        } else if lowercased.contains("create") || lowercased.contains("new log") || lowercased.contains("add") {
+            return await handleCreateNoteRequest(message)
+        } else if lowercased.contains("edit") || lowercased.contains("modify") {
+            return await handleEditNoteRequest(message, notes: availableNotes)
+        } else if lowercased.contains("delete") || lowercased.contains("remove") {
+            return await handleDeleteNoteRequest(message, notes: availableNotes)
+        } else if lowercased.contains("recent") || lowercased.contains("latest") {
+            return await handleRecentNotesRequest(availableNotes)
+        } else if lowercased.contains("tag") && (lowercased.contains("show") || lowercased.contains("find")) {
+            return await handleTagSearchRequest(message, notes: availableNotes)
+        } else if lowercased.contains("category") && (lowercased.contains("show") || lowercased.contains("find")) {
+            return await handleCategorySearchRequest(message, notes: availableNotes)
+        } else if lowercased.contains("today") || lowercased.contains("yesterday") || lowercased.contains("this week") {
+            return await handleDateSearchRequest(message, notes: availableNotes)
+        }
+        
+        // Existing functionality
+        else if lowercased.contains("summarize all") || lowercased.contains("summary of all") {
             return await handleSummarizeAllRequest(availableNotes)
         } else if lowercased.contains("summarize") || lowercased.contains("summary") {
             return await handleSummarizeRequest(message, notes: availableNotes)
@@ -187,7 +234,7 @@ struct AIAssistantView: View {
             return await handleSearchRequest(message, notes: availableNotes)
         } else if lowercased.contains("action") || lowercased.contains("task") || lowercased.contains("todo") {
             return await handleActionItemsRequest(availableNotes)
-        } else if lowercased.contains("organize") || lowercased.contains("category") || lowercased.contains("categorize") {
+        } else if lowercased.contains("organize") || lowercased.contains("categorize") {
             return await handleOrganizeRequest(availableNotes)
         } else if lowercased.contains("related") || lowercased.contains("connection") {
             return await handleRelatedNotesRequest(message, notes: availableNotes)
@@ -196,7 +243,7 @@ struct AIAssistantView: View {
         } else if lowercased.contains("help") {
             return await handleHelpRequest(availableNotes)
         } else {
-            return await handleGeneralQuery(message, notes: availableNotes)
+            return await handleIntelligentQuery(message, notes: availableNotes)
         }
     }
 
@@ -250,6 +297,37 @@ struct AIAssistantView: View {
             return await handleOrganizeRequest(availableNotes)
         case .analyzeNote(let note):
             return await handleSummarizeRequest("analyze \(note.title)", notes: [note])
+        case .openNote(let note):
+            await MainActor.run {
+                selectedNoteForEditing = note
+                showingNoteEditor = true
+            }
+            return ("Opening '\(note.title.isEmpty ? "Untitled" : note.title)' for you...", [], [note])
+        case .createNote(let title):
+            await MainActor.run {
+                newNoteTitle = title
+                selectedNoteForEditing = nil
+                showingNoteEditor = true
+            }
+            return ("Creating a new log titled '\(title)' for you...", [], [])
+        case .editNote(let note):
+            await MainActor.run {
+                selectedNoteForEditing = note
+                showingNoteEditor = true
+            }
+            return ("Opening '\(note.title.isEmpty ? "Untitled" : note.title)' for editing...", [], [note])
+        case .showNotesByTag(let tag):
+            return await handleTagSearchRequest("show notes with tag \(tag)", notes: availableNotes)
+        case .showNotesByCategory(let category):
+            return await handleCategorySearchRequest("show notes in category \(category)", notes: availableNotes)
+        case .showRecentNotes:
+            return await handleRecentNotesRequest(availableNotes)
+        case .showNotesByDate(let date):
+            return await handleDateSearchRequest("show notes from \(date)", notes: availableNotes)
+        case .deleteNote(let note):
+            return ("I can help you identify the note to delete, but you'll need to delete it from the main logs view for safety.", [.openNote(note)], [note])
+        case .duplicateNote(let note):
+            return ("I found the note you want to duplicate. You can open it and copy its content.", [.openNote(note)], [note])
         }
     }
 
@@ -449,10 +527,237 @@ struct AIAssistantView: View {
     }
 
     private func handleHelpRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
-        let response = "Here's what I can help you with:\n\n📝 **Content Analysis**\n• Summarize notes or all notes\n• Extract key points\n• Identify action items\n\n🏷️ **Organization**\n• Suggest categories and tags\n• Find related notes\n• Create smart groupings\n\n🔍 **Search & Discovery**\n• Natural language search\n• Content recommendations\n• Note insights\n\n🎯 **Productivity**\n• Task extraction\n• Priority suggestions\n• Follow-up reminders\n\nJust ask me anything! For example:\n• 'Summarize all my notes'\n• 'Find notes about meetings'\n• 'Extract all tasks'\n• 'Show me related notes'"
+        let response = "Here's what I can help you with:\n\n🗂️ **Navigation & Access**\n• Open specific logs: 'Open my meeting notes'\n• Create new logs: 'Create a log about project X'\n• Edit existing logs: 'Edit my notes from yesterday'\n• Show recent logs: 'Show me recent logs'\n\n🔍 **Smart Search**\n• Find by content: 'Find logs about meetings'\n• Filter by tags: 'Show logs tagged with work'\n• Filter by category: 'Show all personal logs'\n• Date-based: 'Show logs from today'\n\n📝 **Content Analysis**\n• Summarize logs or all logs\n• Extract key points and action items\n• Analyze specific logs\n\n🏷️ **Organization**\n• Find related logs\n• Suggest categories and tags\n• Smart groupings\n\n**Try natural language:**\n• 'Take me to my project notes'\n• 'What did I write about the meeting?'\n• 'Create a new log for my ideas'\n• 'Show me everything tagged important'"
 
-        let actions: [AIAction] = notes.isEmpty ? [] : [.summarizeAll, .extractTasks, .categorizeNotes]
+        let actions: [AIAction] = notes.isEmpty ? [] : [.showRecentNotes, .summarizeAll, .extractTasks]
         return (response, actions, [])
+    }
+    
+    // MARK: - New Enhanced Handlers
+    private func handleOpenNoteRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let searchTerms = extractSearchTerms(from: message)
+        let matchingNotes = searchNotes(searchTerms, in: notes)
+        
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any logs matching '\(searchTerms.joined(separator: ", "))'. Try different keywords or create a new log.", [.createNote(searchTerms.first ?? "New Log")], [])
+        }
+        
+        if matchingNotes.count == 1 {
+            let note = matchingNotes[0]
+            return ("Found '\(note.title.isEmpty ? "Untitled" : note.title)'. Tap 'Open' to view it.", [.openNote(note)], [note])
+        } else {
+            let response = "I found \(matchingNotes.count) logs matching your search:\n\n" +
+                matchingNotes.prefix(5).map { note in
+                    "• \(note.title.isEmpty ? "Untitled" : note.title)"
+                }.joined(separator: "\n")
+            
+            let actions = Array(matchingNotes.prefix(3)).map { AIAction.openNote($0) }
+            return (response, actions, Array(matchingNotes.prefix(5)))
+        }
+    }
+    
+    private func handleCreateNoteRequest(_ message: String) async -> (String, [AIAction], [Note]) {
+        let titleKeywords = ["create", "new", "add", "log", "note", "about", "for"]
+        var cleanedMessage = message.lowercased()
+        
+        for keyword in titleKeywords {
+            cleanedMessage = cleanedMessage.replacingOccurrences(of: keyword, with: "")
+        }
+        
+        let title = cleanedMessage.trimmingCharacters(in: .whitespacesAndNewlines).capitalized
+        let finalTitle = title.isEmpty ? "New Log" : title
+        
+        return ("I'll create a new log titled '\(finalTitle)' for you.", [.createNote(finalTitle)], [])
+    }
+    
+    private func handleEditNoteRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let searchTerms = extractSearchTerms(from: message)
+        let matchingNotes = searchNotes(searchTerms, in: notes)
+        
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any logs to edit matching '\(searchTerms.joined(separator: ", "))'. Try different keywords.", [], [])
+        }
+        
+        if matchingNotes.count == 1 {
+            let note = matchingNotes[0]
+            return ("Opening '\(note.title.isEmpty ? "Untitled" : note.title)' for editing.", [.editNote(note)], [note])
+        } else {
+            let response = "Which log would you like to edit?\n\n" +
+                matchingNotes.prefix(3).map { note in
+                    "• \(note.title.isEmpty ? "Untitled" : note.title)"
+                }.joined(separator: "\n")
+            
+            let actions = Array(matchingNotes.prefix(3)).map { AIAction.editNote($0) }
+            return (response, actions, Array(matchingNotes.prefix(3)))
+        }
+    }
+    
+    private func handleDeleteNoteRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let searchTerms = extractSearchTerms(from: message)
+        let matchingNotes = searchNotes(searchTerms, in: notes)
+        
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any logs matching '\(searchTerms.joined(separator: ", "))' to delete.", [], [])
+        }
+        
+        let response = "⚠️ I found \(matchingNotes.count) log\(matchingNotes.count == 1 ? "" : "s") matching your search. For safety, I can't delete logs directly. I'll show you the log\(matchingNotes.count == 1 ? "" : "s") so you can delete \(matchingNotes.count == 1 ? "it" : "them") manually:\n\n" +
+            matchingNotes.prefix(3).map { note in
+                "• \(note.title.isEmpty ? "Untitled" : note.title)"
+            }.joined(separator: "\n")
+        
+        let actions = Array(matchingNotes.prefix(3)).map { AIAction.openNote($0) }
+        return (response, actions, Array(matchingNotes.prefix(3)))
+    }
+    
+    private func handleRecentNotesRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let recentNotes = Array(notes.sorted { $0.modifiedDate > $1.modifiedDate }.prefix(5))
+        
+        if recentNotes.isEmpty {
+            return ("You don't have any logs yet. Create your first log to get started!", [.createNote("My First Log")], [])
+        }
+        
+        let response = "Here are your \(recentNotes.count) most recent logs:\n\n" +
+            recentNotes.map { note in
+                "• \(note.title.isEmpty ? "Untitled" : note.title) (\(formatRelativeDate(note.modifiedDate)))"
+            }.joined(separator: "\n")
+        
+        let actions = Array(recentNotes.prefix(3)).map { AIAction.openNote($0) }
+        return (response, actions, recentNotes)
+    }
+    
+    private func handleTagSearchRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let words = message.lowercased().components(separatedBy: .whitespacesAndNewlines)
+        let tagKeywordIndex = words.firstIndex { $0.contains("tag") } ?? -1
+        
+        var searchTag = ""
+        if tagKeywordIndex >= 0 && tagKeywordIndex + 1 < words.count {
+            searchTag = words[tagKeywordIndex + 1]
+        }
+        
+        let matchingNotes = notes.filter { note in
+            note.tags.contains { tag in
+                tag.lowercased().contains(searchTag.lowercased())
+            }
+        }
+        
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any logs with the tag '\(searchTag)'. Available tags: \(getAvailableTags(from: notes).joined(separator: ", "))", [], [])
+        }
+        
+        let response = "Found \(matchingNotes.count) log\(matchingNotes.count == 1 ? "" : "s") tagged with '\(searchTag)':\n\n" +
+            matchingNotes.prefix(5).map { note in
+                "• \(note.title.isEmpty ? "Untitled" : note.title)"
+            }.joined(separator: "\n")
+        
+        let actions = Array(matchingNotes.prefix(3)).map { AIAction.openNote($0) }
+        return (response, actions, Array(matchingNotes.prefix(5)))
+    }
+    
+    private func handleCategorySearchRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let words = message.lowercased().components(separatedBy: .whitespacesAndNewlines)
+        let categoryKeywordIndex = words.firstIndex { $0.contains("category") } ?? -1
+        
+        var searchCategory = ""
+        if categoryKeywordIndex >= 0 && categoryKeywordIndex + 1 < words.count {
+            searchCategory = words[categoryKeywordIndex + 1]
+        }
+        
+        let matchingNotes = notes.filter { note in
+            note.category?.name.lowercased().contains(searchCategory.lowercased()) == true
+        }
+        
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any logs in the category '\(searchCategory)'. Available categories: \(getAvailableCategories(from: notes).joined(separator: ", "))", [], [])
+        }
+        
+        let response = "Found \(matchingNotes.count) log\(matchingNotes.count == 1 ? "" : "s") in the '\(searchCategory)' category:\n\n" +
+            matchingNotes.prefix(5).map { note in
+                "• \(note.title.isEmpty ? "Untitled" : note.title)"
+            }.joined(separator: "\n")
+        
+        let actions = Array(matchingNotes.prefix(3)).map { AIAction.openNote($0) }
+        return (response, actions, Array(matchingNotes.prefix(5)))
+    }
+    
+    private func handleDateSearchRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        let today = Calendar.current.startOfDay(for: Date())
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today)!
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: today)!
+        
+        let lowercased = message.lowercased()
+        var dateFilter: (Date) -> Bool
+        var dateDescription: String
+        
+        if lowercased.contains("today") {
+            dateFilter = { Calendar.current.isDate($0, inSameDayAs: Date()) }
+            dateDescription = "today"
+        } else if lowercased.contains("yesterday") {
+            dateFilter = { Calendar.current.isDate($0, inSameDayAs: yesterday) }
+            dateDescription = "yesterday"
+        } else if lowercased.contains("this week") {
+            dateFilter = { $0 >= weekAgo }
+            dateDescription = "this week"
+        } else {
+            dateFilter = { $0 >= weekAgo }
+            dateDescription = "recently"
+        }
+        
+        let matchingNotes = notes.filter { dateFilter($0.modifiedDate) }
+        
+        if matchingNotes.isEmpty {
+            return ("I couldn't find any logs from \(dateDescription).", [.showRecentNotes], [])
+        }
+        
+        let response = "Found \(matchingNotes.count) log\(matchingNotes.count == 1 ? "" : "s") from \(dateDescription):\n\n" +
+            matchingNotes.prefix(5).map { note in
+                "• \(note.title.isEmpty ? "Untitled" : note.title) (\(formatRelativeDate(note.modifiedDate)))"
+            }.joined(separator: "\n")
+        
+        let actions = Array(matchingNotes.prefix(3)).map { AIAction.openNote($0) }
+        return (response, actions, Array(matchingNotes.prefix(5)))
+    }
+    
+    private func handleIntelligentQuery(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {
+        // Try to understand what the user is looking for
+        let searchTerms = extractSearchTerms(from: message)
+        let matchingNotes = searchNotes(searchTerms, in: notes)
+        
+        if !matchingNotes.isEmpty {
+            let response = "I think you're looking for information about '\(searchTerms.joined(separator: ", "))'. I found \(matchingNotes.count) relevant log\(matchingNotes.count == 1 ? "" : "s"):\n\n" +
+                matchingNotes.prefix(3).map { note in
+                    "• \(note.title.isEmpty ? "Untitled" : note.title) - \(String(note.content.prefix(60)))\(note.content.count > 60 ? "..." : "")"
+                }.joined(separator: "\n")
+            
+            let actions = Array(matchingNotes.prefix(3)).map { AIAction.openNote($0) } + [.summarizeAll]
+            return (response, actions, Array(matchingNotes.prefix(5)))
+        }
+        
+        // If no matches, provide helpful suggestions
+        let response = "I understand you're asking about: \"\(message)\"\n\nI can help you with:\n• **Find logs**: 'Show me notes about meetings'\n• **Open specific logs**: 'Open my project notes'\n• **Create new logs**: 'Create a log about today's ideas'\n• **Recent activity**: 'Show me recent logs'\n• **Organization**: 'Show logs tagged with work'\n\nTry being more specific about what you're looking for!"
+        
+        let actions: [AIAction] = notes.isEmpty ? [.createNote("New Log")] : [.showRecentNotes, .summarizeAll]
+        return (response, actions, [])
+    }
+    
+    // MARK: - Helper Methods
+    private func getAvailableTags(from notes: [Note]) -> [String] {
+        let allTags = Set(notes.flatMap { $0.tags })
+        return Array(allTags).sorted()
+    }
+    
+    private func getAvailableCategories(from notes: [Note]) -> [String] {
+        let categories = Set(notes.compactMap { $0.category?.name })
+        return Array(categories).sorted()
+    }
+    
+    private func formatRelativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.dateTimeStyle = .named
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+    
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
@@ -545,6 +850,24 @@ struct ChatMessageView: View {
             return "Categorize"
         case .analyzeNote(_):
             return "Analyze"
+        case .openNote(let note):
+            return "Open '\(note.title.isEmpty ? "Untitled" : note.title)'"
+        case .createNote(let title):
+            return "Create '\(title)'"
+        case .editNote(let note):
+            return "Edit '\(note.title.isEmpty ? "Untitled" : note.title)'"
+        case .showNotesByTag(let tag):
+            return "Show #\(tag)"
+        case .showNotesByCategory(let category):
+            return "Show \(category)"
+        case .showRecentNotes:
+            return "Show Recent"
+        case .showNotesByDate(let date):
+            return "Show from \(date)"
+        case .deleteNote(let note):
+            return "Delete '\(note.title.isEmpty ? "Untitled" : note.title)'"
+        case .duplicateNote(let note):
+            return "Duplicate '\(note.title.isEmpty ? "Untitled" : note.title)'"
         }
     }
 }
@@ -593,6 +916,7 @@ struct ChatInputView: View {
     @Binding var inputText: String
     let isProcessing: Bool
     let onSend: () -> Void
+    @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
         VStack(spacing: 0) {
@@ -602,8 +926,11 @@ struct ChatInputView: View {
                 TextField("Ask me anything...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
+                    .focused($isTextFieldFocused)
                     .onSubmit {
-                        onSend()
+                        if !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            onSend()
+                        }
                     }
                 
                 Button(action: onSend) {
@@ -616,6 +943,15 @@ struct ChatInputView: View {
             .padding()
         }
         .background(Color(.systemBackground))
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isTextFieldFocused = false
+                }
+                .foregroundColor(.blue)
+            }
+        }
     }
 }
 
