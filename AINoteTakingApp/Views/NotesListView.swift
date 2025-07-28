@@ -71,7 +71,7 @@ struct NotesListView: View {
                     )
                 }
             }
-            .navigationTitle("Notes")
+            .navigationTitle("MyLogs")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -91,7 +91,7 @@ struct NotesListView: View {
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search notes...")
+        .searchable(text: $searchText, prompt: "Search logs...")
         .onChange(of: searchText) { newValue in
             viewModel.searchNotes(with: newValue)
         }
@@ -546,19 +546,19 @@ struct EmptyNotesView: View {
                 .foregroundColor(theme.textTertiary)
             
             VStack(spacing: 8) {
-                Text("No Notes Yet")
+                Text("No Logs Yet")
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(theme.textPrimary)
                 
-                Text("Create your first note or record a voice memo")
+                Text("Create your first log or record a voice memo")
                     .font(.body)
                     .foregroundColor(theme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
             
-            Button("Create Note") {
+            Button("Create Log") {
                 showingNoteEditor = true
             }
             .buttonStyle(.borderedProminent)

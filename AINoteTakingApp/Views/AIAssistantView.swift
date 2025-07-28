@@ -311,7 +311,7 @@ struct SearchBar: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.gray)
                 
-                TextField("Search notes, content, tags...", text: $text)
+                TextField("Search logs, content, tags...", text: $text)
                     .onSubmit {
                         onSearchChanged(text)
                     }

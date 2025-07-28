@@ -61,7 +61,7 @@ struct NoteEditorView: View {
             .onTapGesture {
                 dismissKeyboard()
             }
-            .navigationTitle(viewModel.isNewNote ? "New Note" : "Edit Note")
+            .navigationTitle(viewModel.isNewNote ? "New Log" : "Edit Log")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarLeading) {
@@ -146,7 +146,7 @@ struct BasicNoteFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Title Field
-            TextField("Note Title", text: $viewModel.title)
+            TextField("Log Title", text: $viewModel.title)
                 .font(.title2)
                 .fontWeight(.semibold)
                 .textFieldStyle(.plain)

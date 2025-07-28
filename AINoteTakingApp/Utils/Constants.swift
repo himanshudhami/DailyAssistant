@@ -231,16 +231,16 @@ struct AppConstants {
     
     // MARK: - Accessibility
     struct Accessibility {
-        static let noteCard = "Note card"
-        static let recordButton = "Record voice note"
+        static let noteCard = "Log card"
+        static let recordButton = "Record voice log"
         static let playButton = "Play audio"
         static let pauseButton = "Pause audio"
         static let stopButton = "Stop audio"
         static let deleteButton = "Delete"
         static let editButton = "Edit"
         static let shareButton = "Share"
-        static let addButton = "Add new note"
-        static let searchField = "Search notes"
+        static let addButton = "Add new log"
+        static let searchField = "Search logs"
         static let categoryFilter = "Filter by category"
         static let sortOptions = "Sort options"
         static let aiAssistant = "AI Assistant"

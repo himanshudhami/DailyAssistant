@@ -40,7 +40,7 @@ struct MainTabView: View {
             NotesListView()
                 .tabItem {
                     Image(systemName: "note.text")
-                    Text("Notes")
+                    Text("MyLogs")
                 }
                 .tag(0)
             
@@ -104,11 +104,11 @@ struct AuthenticationView: View {
                         .offset(x: 25, y: 25)
                 }
                 
-                Text("AI Note Taking")
+                Text("MyLogs AI")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 
-                Text("Secure your notes with biometric authentication")
+                Text("Secure your logs with biometric authentication")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
