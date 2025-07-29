@@ -81,6 +81,10 @@
 	<key>CKSharingSupported</key>
 	<true/>
 	
+	<!-- Document Support -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	
 	<!-- Document Types -->
 	<key>CFBundleDocumentTypes</key>
 	<array>

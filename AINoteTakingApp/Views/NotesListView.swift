@@ -2,96 +2,54 @@
 //  NotesListView.swift
 //  AINoteTakingApp
 //
-//  Created by AI Assistant on 2024-01-01.
+//  Main view for displaying and managing notes with hierarchical folder organization.
+//  Supports search, filtering, categorization, and multiple view modes (list/grid).
+//  Integrates with SQLite database through Core Data for persistent storage.
+//
+//  Created by AI Assistant on 2025-01-29.
 //
 
 import SwiftUI
+import CoreData
 
-// MARK: - View Mode
-enum NotesViewMode: CaseIterable {
-    case grid
-    case list
-    
-    var icon: String {
-        switch self {
-        case .grid: return "square.grid.2x2"
-        case .list: return "list.bullet"
-        }
-    }
-}
-
-// MARK: - Sort Options
-enum NoteSortOption: CaseIterable {
-    case modifiedDate
-    case createdDate
-    case title
-    
-    var displayName: String {
-        switch self {
-        case .modifiedDate: return "Modified"
-        case .createdDate: return "Created"
-        case .title: return "Title"
-        }
-    }
-}
-
-// MARK: - Main Notes List View
 struct NotesListView: View {
     @Environment(\.appTheme) private var theme
-    @EnvironmentObject var viewModel: NotesListViewModel
-    @State private var showingNoteEditor = false
-    @State private var selectedNote: Note?
-    @State private var showingVoiceRecorder = false
+    @StateObject private var viewModel = NotesListViewModel()
+    
+    // Search and filter states
     @State private var searchText = ""
     @State private var selectedCategory: Category?
     @State private var sortOption: NoteSortOption = .modifiedDate
-    @State private var viewMode: NotesViewMode = .grid
-    @State private var noteToDelete: Note?
+    @State private var viewMode: ViewMode = .list
+    
+    // Sheet and navigation states
+    @State private var selectedNote: Note?
+    @State private var showingNoteEditor = false
+    @State private var showingVoiceRecorder = false
+    @State private var showingCreateFolder = false
+    
+    // Alert states
     @State private var showingDeleteAlert = false
+    @State private var noteToDelete: Note?
+    @State private var folderToDelete: Folder?
+    @State private var folderToRename: Folder?
+    @State private var newFolderName = ""
+    
+    private var currentFolders: [Folder] {
+        return viewModel.folders.filter { $0.parentFolderId == viewModel.currentFolder?.id }
+    }
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Top Controls
-                TopControlsBar(
-                    searchText: $searchText,
-                    selectedCategory: $selectedCategory,
-                    sortOption: $sortOption,
-                    viewMode: $viewMode,
-                    categories: viewModel.categories
-                )
-                
-                // Notes Content
-                if viewModel.filteredNotes.isEmpty {
-                    EmptyNotesView(showingNoteEditor: $showingNoteEditor)
-                } else {
-                    NotesContentView(
-                        notes: viewModel.filteredNotes,
-                        viewMode: viewMode,
-                        selectedNote: $selectedNote,
-                        showingNoteEditor: $showingNoteEditor,
-                        onDeleteNote: confirmDelete
-                    )
-                    .environmentObject(viewModel)
-                }
+                breadcrumbSection
+                mainContentSection
             }
-            .navigationTitle("MyLogs")
+            .navigationTitle(viewModel.currentFolder?.name ?? "MyLogs")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button(action: { showingVoiceRecorder = true }) {
-                            Image(systemName: "mic.circle.fill")
-                                .foregroundColor(theme.error)
-                                .font(.title2)
-                        }
-                        
-                        Button(action: { showingNoteEditor = true }) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(theme.primary)
-                                .font(.title2)
-                        }
-                    }
+                    toolbarContent
                 }
             }
         }
@@ -105,8 +63,11 @@ struct NotesListView: View {
         .onChange(of: sortOption) { newValue in
             viewModel.sortNotes(by: newValue)
         }
+        .onChange(of: viewModel.currentFolder) { _ in
+            viewModel.loadNotes()
+        }
         .sheet(isPresented: $showingNoteEditor) {
-            NoteEditorView(note: selectedNote)
+            NoteEditorView(note: selectedNote, currentFolder: viewModel.currentFolder)
         }
         .onChange(of: showingNoteEditor) { isShowing in
             if !isShowing {
@@ -114,10 +75,16 @@ struct NotesListView: View {
             }
         }
         .sheet(isPresented: $showingVoiceRecorder) {
-            VoiceRecorderView()
+            VoiceRecorderView(currentFolder: viewModel.currentFolder)
+        }
+        .sheet(isPresented: $showingCreateFolder) {
+            CreateFolderSheet { folderName in
+                viewModel.createFolder(name: folderName)
+            }
         }
         .onAppear {
             viewModel.loadNotes()
+            viewModel.loadFolders()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NotesDidChange"))) { _ in
             viewModel.refresh()
@@ -139,12 +106,195 @@ struct NotesListView: View {
                 Text("Are you sure you want to delete \"\(note.title.isEmpty ? "Untitled" : note.title)\"? This action cannot be undone.")
             }
         }
+        .alert("Delete Folder", isPresented: Binding<Bool>(
+            get: { folderToDelete != nil },
+            set: { if !$0 { folderToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) {
+                folderToDelete = nil
+            }
+            Button("Move Contents Up", role: .cancel) {
+                if let folder = folderToDelete {
+                    viewModel.deleteFolder(folder, cascadeDelete: false)
+                }
+                folderToDelete = nil
+            }
+            Button("Delete Everything", role: .destructive) {
+                if let folder = folderToDelete {
+                    viewModel.deleteFolder(folder, cascadeDelete: true)
+                }
+                folderToDelete = nil
+            }
+        } message: {
+            if let folder = folderToDelete {
+                Text("Choose how to handle \"\(folder.name)\":\n• Move Contents Up: Move all notes and subfolders to parent\n• Delete Everything: Permanently delete folder and all contents")
+            }
+        }
+        .alert("Rename Folder", isPresented: Binding<Bool>(
+            get: { folderToRename != nil },
+            set: { if !$0 { folderToRename = nil; newFolderName = "" } }
+        )) {
+            TextField("Folder Name", text: $newFolderName)
+            Button("Cancel", role: .cancel) {
+                folderToRename = nil
+                newFolderName = ""
+            }
+            Button("Rename") {
+                if let folder = folderToRename, !newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    var updatedFolder = folder
+                    updatedFolder.name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let index = viewModel.folders.firstIndex(where: { $0.id == folder.id }) {
+                        viewModel.folders[index] = updatedFolder
+                    }
+                }
+                folderToRename = nil
+                newFolderName = ""
+            }
+        } message: {
+            Text("Enter a new name for the folder.")
+        }
     }
 
     // MARK: - Helper Methods
     private func confirmDelete(_ note: Note) {
         noteToDelete = note
         showingDeleteAlert = true
+    }
+    
+    // MARK: - Helper Views
+    
+    @ViewBuilder
+    private var breadcrumbSection: some View {
+        if !viewModel.folderHierarchy.isEmpty || viewModel.currentFolder != nil {
+            VStack(spacing: 0) {
+                BreadcrumbView(
+                    hierarchy: viewModel.folderHierarchy,
+                    onNavigate: { folder in
+                        viewModel.enterFolder(folder)
+                    },
+                    onNavigateToRoot: {
+                        viewModel.currentFolder = nil
+                        viewModel.loadFolders()
+                        viewModel.loadNotes()
+                    }
+                )
+                
+                quickFolderSwitcher
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var quickFolderSwitcher: some View {
+        if !viewModel.folders.isEmpty && viewModel.currentFolder == nil {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(viewModel.folders.prefix(10), id: \.id) { folder in
+                        folderChip(folder)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .frame(height: 32)
+        }
+    }
+    
+    @ViewBuilder
+    private func folderChip(_ folder: Folder) -> some View {
+        Button(action: {
+            viewModel.enterFolder(folder)
+        }) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(folderGradient(folder))
+                    .frame(width: 12, height: 12)
+                
+                Text(folder.name)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(.systemGray6))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func folderGradient(_ folder: Folder) -> LinearGradient {
+        LinearGradient(
+            colors: folder.gradientColors.map { Color(hex: $0) },
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    @ViewBuilder
+    private var mainContentSection: some View {
+        TopControlsBar(
+            searchText: $searchText,
+            selectedCategory: $selectedCategory,
+            sortOption: $sortOption,
+            viewMode: $viewMode,
+            categories: viewModel.categories,
+            onCreateFolder: { showingCreateFolder = true }
+        )
+        
+        if viewModel.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            NotesContentView(
+                notes: viewModel.filteredNotes,
+                folders: currentFolders,
+                viewMode: viewMode,
+                selectedNote: $selectedNote,
+                showingNoteEditor: $showingNoteEditor,
+                onDeleteNote: confirmDelete,
+                onFolderRename: { folder in
+                    folderToRename = folder
+                    newFolderName = folder.name
+                },
+                onFolderDelete: { folder in
+                    folderToDelete = folder
+                }
+            )
+            .environmentObject(viewModel)
+        }
+    }
+    
+    @ViewBuilder
+    private var toolbarContent: some View {
+        HStack(spacing: 16) {
+            Button(action: { showingVoiceRecorder = true }) {
+                Image(systemName: "mic.circle.fill")
+                    .foregroundColor(theme.error)
+                    .font(.title2)
+            }
+            
+            Menu {
+                Button("New Log") {
+                    showingNoteEditor = true
+                }
+                
+                if !viewModel.folders.isEmpty && viewModel.currentFolder == nil {
+                    Divider()
+                    Text("Create in Folder:")
+                    ForEach(viewModel.folders.prefix(5), id: \.id) { folder in
+                        Button("📁 \(folder.name)") {
+                            viewModel.enterFolder(folder)
+                            showingNoteEditor = true
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundColor(theme.primary)
+                    .font(.title2)
+            } primaryAction: {
+                showingNoteEditor = true
+            }
+        }
     }
 }
 
@@ -154,8 +304,9 @@ struct TopControlsBar: View {
     @Binding var searchText: String
     @Binding var selectedCategory: Category?
     @Binding var sortOption: NoteSortOption
-    @Binding var viewMode: NotesViewMode
+    @Binding var viewMode: ViewMode
     let categories: [Category]
+    let onCreateFolder: (() -> Void)?
     
     var body: some View {
         VStack(spacing: 8) {
@@ -169,6 +320,14 @@ struct TopControlsBar: View {
                 Spacer()
                 
                 SortOptionsButton(sortOption: $sortOption)
+                
+                if let onCreateFolder = onCreateFolder {
+                    Button(action: onCreateFolder) {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.caption)
+                            .foregroundColor(theme.primary)
+                    }
+                }
                 
                 ViewModeButton(viewMode: $viewMode)
             }
@@ -224,7 +383,7 @@ struct SortOptionsButton: View {
     var body: some View {
         Menu {
             ForEach(NoteSortOption.allCases, id: \.self) { option in
-                Button(option.displayName) {
+                Button(option.rawValue) {
                     sortOption = option
                 }
             }
@@ -232,7 +391,7 @@ struct SortOptionsButton: View {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.caption)
-                Text(sortOption.displayName)
+                Text(sortOption.rawValue)
                     .font(.caption)
                     .fontWeight(.medium)
             }
@@ -247,13 +406,13 @@ struct SortOptionsButton: View {
 
 struct ViewModeButton: View {
     @Environment(\.appTheme) private var theme
-    @Binding var viewMode: NotesViewMode
+    @Binding var viewMode: ViewMode
     
     var body: some View {
         Button(action: {
             viewMode = viewMode == .grid ? .list : .grid
         }) {
-            Image(systemName: viewMode.icon)
+            Image(systemName: viewMode.systemImageName)
                 .font(.caption)
                 .foregroundColor(theme.textPrimary)
                 .padding(8)
@@ -266,31 +425,50 @@ struct ViewModeButton: View {
 // MARK: - Notes Content View
 struct NotesContentView: View {
     let notes: [Note]
-    let viewMode: NotesViewMode
+    let folders: [Folder]
+    let viewMode: ViewMode
     @Binding var selectedNote: Note?
     @Binding var showingNoteEditor: Bool
     let onDeleteNote: (Note) -> Void
+    let onFolderRename: (Folder) -> Void
+    let onFolderDelete: (Folder) -> Void
     @EnvironmentObject var viewModel: NotesListViewModel
 
     var body: some View {
         ScrollView {
-            switch viewMode {
-            case .grid:
-                NotesGridView(
-                    notes: notes,
-                    selectedNote: $selectedNote,
-                    showingNoteEditor: $showingNoteEditor,
-                    onDeleteNote: onDeleteNote
-                )
-                .environmentObject(viewModel)
-            case .list:
-                NotesListContentView(
-                    notes: notes,
-                    selectedNote: $selectedNote,
-                    showingNoteEditor: $showingNoteEditor,
-                    onDeleteNote: onDeleteNote
-                )
-                .environmentObject(viewModel)
+            VStack(spacing: 16) {
+                // Folders Section
+                if !folders.isEmpty {
+                    FoldersSection(
+                        folders: folders,
+                        viewMode: viewMode,
+                        onFolderTap: { folder in
+                            viewModel.enterFolder(folder)
+                        },
+                        onFolderRename: onFolderRename,
+                        onFolderDelete: onFolderDelete
+                    )
+                }
+                
+                // Notes Section
+                switch viewMode {
+                case .grid:
+                    NotesGridView(
+                        notes: notes,
+                        selectedNote: $selectedNote,
+                        showingNoteEditor: $showingNoteEditor,
+                        onDeleteNote: onDeleteNote
+                    )
+                    .environmentObject(viewModel)
+                case .list:
+                    NotesListContentView(
+                        notes: notes,
+                        selectedNote: $selectedNote,
+                        showingNoteEditor: $showingNoteEditor,
+                        onDeleteNote: onDeleteNote
+                    )
+                    .environmentObject(viewModel)
+                }
             }
         }
     }
@@ -312,7 +490,7 @@ struct NotesGridView: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             ForEach(notes) { note in
-                UniformNoteCard(note: note)
+                UniformNoteCard(note: note, viewModel: viewModel)
                     .onTapGesture {
                         DispatchQueue.main.async {
                             selectedNote = note
@@ -323,6 +501,20 @@ struct NotesGridView: View {
                         Button("Edit") {
                             selectedNote = note
                             showingNoteEditor = true
+                        }
+                        
+                        if !viewModel.folders.isEmpty {
+                            Menu("Move to Folder") {
+                                Button("Root") {
+                                    viewModel.moveNoteToFolder(note, folder: nil)
+                                }
+                                
+                                ForEach(viewModel.folders, id: \.id) { folder in
+                                    Button(folder.name) {
+                                        viewModel.moveNoteToFolder(note, folder: folder)
+                                    }
+                                }
+                            }
                         }
 
                         Button("Delete", role: .destructive) {
@@ -346,14 +538,31 @@ struct NotesListContentView: View {
     var body: some View {
         LazyVStack(spacing: 12) {
             ForEach(notes) { note in
-                NoteListRow(note: note)
+                NoteListRow(note: note, viewModel: viewModel)
                     .onTapGesture {
                         DispatchQueue.main.async {
                             selectedNote = note
                             showingNoteEditor = true
                         }
                     }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !viewModel.folders.isEmpty {
+                            Menu {
+                                Button("Root") {
+                                    viewModel.moveNoteToFolder(note, folder: nil)
+                                }
+                                
+                                ForEach(viewModel.folders, id: \.id) { folder in
+                                    Button(folder.name) {
+                                        viewModel.moveNoteToFolder(note, folder: folder)
+                                    }
+                                }
+                            } label: {
+                                Label("Move", systemImage: "folder")
+                            }
+                            .tint(.blue)
+                        }
+                        
                         Button("Delete", role: .destructive) {
                             onDeleteNote(note)
                         }
@@ -368,11 +577,32 @@ struct NotesListContentView: View {
 struct UniformNoteCard: View {
     @Environment(\.appTheme) private var theme
     let note: Note
+    @ObservedObject var viewModel: NotesListViewModel
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Header
-            NoteCardHeader(note: note)
+            HStack {
+                NoteCardHeader(note: note)
+                
+                Spacer()
+                
+                // Folder indicator
+                if let folderId = note.folderId,
+                   let folder = viewModel.folders.first(where: { $0.id == folderId }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.fill")
+                            .font(.caption2)
+                        Text(folder.name)
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color(.systemGray6))
+                    .clipShape(Capsule())
+                }
+            }
             
             // Title (flexible height)
             Text(note.title.isEmpty ? "Untitled" : note.title)
@@ -406,6 +636,7 @@ struct UniformNoteCard: View {
 struct NoteListRow: View {
     @Environment(\.appTheme) private var theme
     let note: Note
+    @ObservedObject var viewModel: NotesListViewModel
     
     var body: some View {
         HStack(spacing: 12) {
@@ -445,6 +676,22 @@ struct NoteListRow: View {
                             .truncationMode(.tail)
                     }
                     
+                    // Folder indicator
+                    if let folderId = note.folderId,
+                       let folder = viewModel.folders.first(where: { $0.id == folderId }) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "folder.fill")
+                                .font(.caption2)
+                            Text(folder.name)
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color(.systemGray6))
+                        .clipShape(Capsule())
+                    }
+                    
                     Spacer()
                     
                     NoteIndicators(note: note)
@@ -468,8 +715,6 @@ struct NoteCardHeader: View {
             if let category = note.category {
                 CategoryTag(category: category)
             }
-            
-            Spacer()
             
             Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
@@ -584,45 +829,97 @@ struct NoteIndicators: View {
     }
 }
 
-// MARK: - Empty State
-struct EmptyNotesView: View {
-    @Environment(\.appTheme) private var theme
-    @Binding var showingNoteEditor: Bool
+// MARK: - Breadcrumb View
+struct BreadcrumbView: View {
+    let hierarchy: [Folder]
+    let onNavigate: (Folder) -> Void
+    let onNavigateToRoot: () -> Void
     
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            Image(systemName: "note.text")
-                .font(.system(size: 80))
-                .foregroundColor(theme.textTertiary)
-            
-            VStack(spacing: 8) {
-                Text("No Logs Yet")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(theme.textPrimary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button("Home") {
+                    onNavigateToRoot()
+                }
+                .foregroundColor(.blue)
+                .font(.caption)
                 
-                Text("Create your first log or record a voice memo")
-                    .font(.body)
-                    .foregroundColor(theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                ForEach(hierarchy, id: \.id) { folder in
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
+                        Button(folder.name) {
+                            onNavigate(folder)
+                        }
+                        .foregroundColor(.blue)
+                        .font(.caption)
+                    }
+                }
             }
-            
-            Button("Create Log") {
-                showingNoteEditor = true
-            }
-            .buttonStyle(.borderedProminent)
-            .accentColor(theme.primary)
-            .padding(.top)
-            
-            Spacer()
+            .padding(.horizontal)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            LinearGradient(
+                colors: [Color(.systemGray6), Color(.systemGray5)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .frame(minHeight: 40)
     }
 }
 
+// MARK: - Folders Section
+struct FoldersSection: View {
+    let folders: [Folder]
+    let viewMode: ViewMode
+    let onFolderTap: (Folder) -> Void
+    let onFolderRename: (Folder) -> Void
+    let onFolderDelete: (Folder) -> Void
+    
+    var body: some View {
+        if !folders.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Folders")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                
+                if viewMode == .grid {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 12) {
+                        ForEach(folders, id: \.id) { folder in
+                            FolderGridView(
+                                folder: folder,
+                                onTap: { onFolderTap(folder) },
+                                onRename: { onFolderRename(folder) },
+                                onDelete: { onFolderDelete(folder) }
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                } else {
+                    LazyVStack(spacing: 4) {
+                        ForEach(folders, id: \.id) { folder in
+                            FolderRowView(
+                                folder: folder,
+                                onTap: { onFolderTap(folder) },
+                                onRename: { onFolderRename(folder) },
+                                onDelete: { onFolderDelete(folder) }
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.bottom)
+        }
+    }
+}
 
 #Preview {
     NotesListView()

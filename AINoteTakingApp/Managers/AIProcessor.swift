@@ -257,54 +257,38 @@ class AIProcessor: ObservableObject {
             }
         }
         
-        do {
-            // Step 1: Generate summary
-            await updateProgress(0.2)
-            let summary = await summarizeContent(text)
-            
-            // Step 2: Extract key points
-            await updateProgress(0.4)
-            let keyPoints = await extractKeyPoints(text)
-            
-            // Step 3: Extract action items
-            await updateProgress(0.6)
-            let actionItems = await extractActionItems(text)
-            
-            // Step 4: Suggest tags
-            await updateProgress(0.8)
-            let suggestedTags = await suggestTags(text)
-            
-            // Step 5: Categorize content
-            await updateProgress(0.9)
-            let suggestedCategory = await categorizeContent(text)
-            
-            // Step 6: Analyze sentiment
-            await updateProgress(1.0)
-            let sentiment = await analyzeSentiment(text)
-            
-            return ProcessedContent(
-                summary: summary,
-                keyPoints: keyPoints,
-                actionItems: actionItems,
-                suggestedTags: suggestedTags,
-                suggestedCategory: suggestedCategory,
-                sentiment: sentiment
-            )
-            
-        } catch {
-            await MainActor.run {
-                errorMessage = "AI processing failed: \(error.localizedDescription)"
-            }
-            
-            return ProcessedContent(
-                summary: "",
-                keyPoints: [],
-                actionItems: [],
-                suggestedTags: [],
-                suggestedCategory: nil,
-                sentiment: "neutral"
-            )
-        }
+        // Step 1: Generate summary
+        await updateProgress(0.2)
+        let summary = await summarizeContent(text)
+        
+        // Step 2: Extract key points
+        await updateProgress(0.4)
+        let keyPoints = await extractKeyPoints(text)
+        
+        // Step 3: Extract action items
+        await updateProgress(0.6)
+        let actionItems = await extractActionItems(text)
+        
+        // Step 4: Suggest tags
+        await updateProgress(0.8)
+        let suggestedTags = await suggestTags(text)
+        
+        // Step 5: Categorize content
+        await updateProgress(0.9)
+        let suggestedCategory = await categorizeContent(text)
+        
+        // Step 6: Analyze sentiment
+        await updateProgress(1.0)
+        let sentiment = await analyzeSentiment(text)
+        
+        return ProcessedContent(
+            summary: summary,
+            keyPoints: keyPoints,
+            actionItems: actionItems,
+            suggestedTags: suggestedTags,
+            suggestedCategory: suggestedCategory,
+            sentiment: sentiment
+        )
     }
     
     private func updateProgress(_ progress: Double) async {
@@ -937,5 +921,66 @@ class AIProcessor: ObservableObject {
         }
         
         return min(max(confidence, 0.0), 1.0) // Clamp between 0 and 1
+    }
+    
+    // MARK: - Folder Sentiment Analysis
+    func analyzeFolderSentiment(for notes: [Note]) async -> FolderSentiment {
+        guard !notes.isEmpty else { return .neutral }
+        
+        var totalSentimentScore: Double = 0
+        var sentimentCounts: [String: Int] = [:]
+        var validAnalyses = 0
+        
+        for note in notes {
+            let content = "\(note.title) \(note.content)"
+            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            
+            let sentiment = await analyzeSentiment(content)
+            sentimentCounts[sentiment, default: 0] += 1
+            
+            // Convert sentiment to numerical score
+            switch sentiment {
+            case "positive":
+                totalSentimentScore += 1.0
+            case "negative":
+                totalSentimentScore -= 1.0
+            default:
+                totalSentimentScore += 0.0
+            }
+            
+            validAnalyses += 1
+        }
+        
+        guard validAnalyses > 0 else { return .neutral }
+        
+        let averageScore = totalSentimentScore / Double(validAnalyses)
+        let positiveCount = sentimentCounts["positive"] ?? 0
+        let negativeCount = sentimentCounts["negative"] ?? 0
+        let neutralCount = sentimentCounts["neutral"] ?? 0
+        
+        // Determine overall folder sentiment
+        let dominantSentiment = max(positiveCount, negativeCount, neutralCount)
+        let mixedThreshold = validAnalyses / 3 // If no sentiment dominates by more than 1/3
+        
+        if positiveCount > 0 && negativeCount > 0 && dominantSentiment < mixedThreshold * 2 {
+            return .mixed
+        } else if averageScore >= 0.6 {
+            return .veryPositive
+        } else if averageScore >= 0.2 {
+            return .positive
+        } else if averageScore <= -0.6 {
+            return .veryNegative
+        } else if averageScore <= -0.2 {
+            return .negative
+        } else {
+            return .neutral
+        }
+    }
+    
+    func updateFolderSentiment(_ folder: inout Folder, with notes: [Note]) async {
+        let folderNotes = notes.filter { $0.folderId == folder.id }
+        folder.sentiment = await analyzeFolderSentiment(for: folderNotes)
+        folder.noteCount = folderNotes.count
+        folder.modifiedDate = Date()
     }
 }

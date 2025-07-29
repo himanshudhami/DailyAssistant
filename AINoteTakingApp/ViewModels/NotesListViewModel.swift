@@ -16,20 +16,26 @@ class NotesListViewModel: ObservableObject {
     @Published var notes: [Note] = []
     @Published var filteredNotes: [Note] = []
     @Published var categories: [Category] = []
+    @Published var folders: [Folder] = []
+    @Published var currentFolder: Folder?
+    @Published var folderHierarchy: [Folder] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var searchText = ""
     @Published var selectedCategory: Category?
     @Published var sortOption: NoteSortOption = .modifiedDate
+    @Published var viewMode: ViewMode = .list
     
     // MARK: - Private Properties
-    private let persistenceController = PersistenceController.shared
+    private let dataManager = DataManager.shared
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
     init() {
         setupBindings()
         loadCategories()
+        loadFolders()
+        loadNotes()
     }
     
     private func setupBindings() {
@@ -47,72 +53,18 @@ class NotesListViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        Task {
-            do {
-                let fetchedNotes = try await fetchNotesFromCoreData()
-                await MainActor.run {
-                    self.notes = fetchedNotes
-                    self.applyFiltersAndSort(
-                        searchText: self.searchText,
-                        category: self.selectedCategory,
-                        sortOption: self.sortOption
-                    )
-                    self.isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to load notes: \(error.localizedDescription)"
-                    self.isLoading = false
-                }
-            }
-        }
-    }
-    
-    private func fetchNotesFromCoreData() async throws -> [Note] {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
-            request.sortDescriptors = [NSSortDescriptor(keyPath: \NoteEntity.modifiedDate, ascending: false)]
-            
-            do {
-                let noteEntities = try context.fetch(request)
-                let notes = noteEntities.map { Note(from: $0) }
-                continuation.resume(returning: notes)
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        let fetchedNotes = dataManager.fetchNotes(in: currentFolder)
+        self.notes = fetchedNotes
+        self.applyFiltersAndSort(
+            searchText: self.searchText,
+            category: self.selectedCategory,
+            sortOption: self.sortOption
+        )
+        self.isLoading = false
     }
     
     func loadCategories() {
-        Task {
-            do {
-                let fetchedCategories = try await fetchCategoriesFromCoreData()
-                await MainActor.run {
-                    self.categories = fetchedCategories
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to load categories: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-    
-    private func fetchCategoriesFromCoreData() async throws -> [Category] {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            let request: NSFetchRequest<CategoryEntity> = CategoryEntity.fetchRequest()
-            request.sortDescriptors = [NSSortDescriptor(keyPath: \CategoryEntity.sortOrder, ascending: true)]
-            
-            do {
-                let categoryEntities = try context.fetch(request)
-                let categories = categoryEntities.map { Category(from: $0) }
-                continuation.resume(returning: categories)
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        self.categories = dataManager.fetchCategories()
     }
     
     // MARK: - Filtering and Sorting
@@ -154,6 +106,8 @@ class NotesListViewModel: ObservableObject {
             filtered.sort { $0.createdDate > $1.createdDate }
         case .title:
             filtered.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .category:
+            filtered.sort { ($0.category?.name ?? "") < ($1.category?.name ?? "") }
         }
         
         filteredNotes = filtered
@@ -161,42 +115,25 @@ class NotesListViewModel: ObservableObject {
     
     // MARK: - Note Management
     func deleteNote(_ note: Note) {
-        Task {
-            do {
-                try await deleteNoteFromCoreData(note)
-                await MainActor.run {
-                    self.notes.removeAll { $0.id == note.id }
-                    self.applyFiltersAndSort(
-                        searchText: self.searchText,
-                        category: self.selectedCategory,
-                        sortOption: self.sortOption
-                    )
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to delete note: \(error.localizedDescription)"
-                }
-            }
-        }
+        dataManager.deleteNote(note)
+        self.notes.removeAll { $0.id == note.id }
+        self.applyFiltersAndSort(
+            searchText: self.searchText,
+            category: self.selectedCategory,
+            sortOption: self.sortOption
+        )
     }
     
-    private func deleteNoteFromCoreData(_ note: Note) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
-            request.predicate = NSPredicate(format: "id == %@", note.id as CVarArg)
-            
-            do {
-                let noteEntities = try context.fetch(request)
-                for entity in noteEntities {
-                    context.delete(entity)
-                }
-                try context.save()
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
+    func updateNote(_ note: Note) {
+        dataManager.updateNote(note)
+        if let index = self.notes.firstIndex(where: { $0.id == note.id }) {
+            self.notes[index] = note
         }
+        self.applyFiltersAndSort(
+            searchText: self.searchText,
+            category: self.selectedCategory,
+            sortOption: self.sortOption
+        )
     }
     
     func duplicateNote(_ note: Note) {
@@ -205,75 +142,29 @@ class NotesListViewModel: ObservableObject {
             content: note.content,
             tags: note.tags,
             category: note.category,
+            folderId: note.folderId,
             aiSummary: note.aiSummary,
             keyPoints: note.keyPoints
         )
         
-        Task {
-            do {
-                try await saveNoteToCoreData(duplicatedNote)
-                await MainActor.run {
-                    self.notes.append(duplicatedNote)
-                    self.applyFiltersAndSort(
-                        searchText: self.searchText,
-                        category: self.selectedCategory,
-                        sortOption: self.sortOption
-                    )
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to duplicate note: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-    
-    private func saveNoteToCoreData(_ note: Note) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            let noteEntity = NoteEntity(context: context)
-            note.updateEntity(noteEntity)
-            
-            do {
-                try context.save()
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        let savedNote = dataManager.createNote(
+            title: duplicatedNote.title,
+            content: duplicatedNote.content,
+            folderId: duplicatedNote.folderId
+        )
+        
+        self.notes.append(savedNote)
+        self.applyFiltersAndSort(
+            searchText: self.searchText,
+            category: self.selectedCategory,
+            sortOption: self.sortOption
+        )
     }
     
     // MARK: - Category Management
     func createCategory(name: String, color: String) {
-        let newCategory = Category(name: name, color: color, sortOrder: categories.count)
-        
-        Task {
-            do {
-                try await saveCategoryToCoreData(newCategory)
-                await MainActor.run {
-                    self.categories.append(newCategory)
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to create category: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-    
-    private func saveCategoryToCoreData(_ category: Category) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            let categoryEntity = CategoryEntity(context: context)
-            category.updateEntity(categoryEntity)
-            
-            do {
-                try context.save()
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        let newCategory = dataManager.createCategory(name: name, color: color)
+        self.categories.append(newCategory)
     }
     
     // MARK: - Statistics
@@ -310,37 +201,11 @@ class NotesListViewModel: ObservableObject {
     
     // MARK: - Bulk Operations
     func deleteAllNotes() {
-        Task {
-            do {
-                try await deleteAllNotesFromCoreData()
-                await MainActor.run {
-                    self.notes.removeAll()
-                    self.filteredNotes.removeAll()
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to delete all notes: \(error.localizedDescription)"
-                }
-            }
+        for note in notes {
+            dataManager.deleteNote(note)
         }
-    }
-    
-    private func deleteAllNotesFromCoreData() async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
-            
-            do {
-                let noteEntities = try context.fetch(request)
-                for entity in noteEntities {
-                    context.delete(entity)
-                }
-                try context.save()
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        self.notes.removeAll()
+        self.filteredNotes.removeAll()
     }
     
     func exportNotes() -> [Note] {
@@ -368,9 +233,100 @@ class NotesListViewModel: ObservableObject {
         return Array(suggestions).sorted()
     }
     
+    // MARK: - Folder Management
+    func loadFolders() {
+        if let currentFolder = currentFolder {
+            self.folders = dataManager.fetchFolders(parentFolder: currentFolder)
+        } else {
+            self.folders = dataManager.fetchFolders()
+        }
+        updateFolderHierarchy()
+    }
+    
+    func createFolder(name: String, parentFolderId: UUID? = nil) {
+        let parentFolder = currentFolder ?? (parentFolderId != nil ? folders.first { $0.id == parentFolderId } : nil)
+        let newFolder = dataManager.createFolder(name: name, parentFolder: parentFolder)
+        folders.append(newFolder)
+        updateFolderHierarchy()
+    }
+    
+    func deleteFolder(_ folder: Folder, cascadeDelete: Bool = true) {
+        dataManager.deleteFolder(folder, cascadeDelete: cascadeDelete)
+        folders.removeAll { $0.id == folder.id }
+        updateFolderHierarchy()
+        // Refresh to show updated folder structure
+        loadFolders()
+        loadNotes()
+    }
+    
+    func enterFolder(_ folder: Folder) {
+        currentFolder = folder
+        loadFolders()
+        loadNotes()
+        updateFolderHierarchy()
+    }
+    
+    func navigateToParentFolder() {
+        if let current = currentFolder,
+           let parentId = current.parentFolderId {
+            let allFolders = dataManager.fetchAllFolders()
+            currentFolder = allFolders.first { $0.id == parentId }
+        } else {
+            currentFolder = nil
+        }
+        loadFolders()
+        loadNotes()
+        updateFolderHierarchy()
+    }
+    
+    func moveNoteToFolder(_ note: Note, folder: Folder?) {
+        var updatedNote = note
+        updatedNote.folderId = folder?.id
+        updatedNote.modifiedDate = Date()
+        updateNote(updatedNote)
+    }
+    
+    private func updateFolderHierarchy() {
+        if let currentFolder = currentFolder {
+            folderHierarchy = dataManager.getFolderPath(currentFolder)
+        } else {
+            folderHierarchy = []
+        }
+    }
+    
     // MARK: - Refresh
     func refresh() {
         loadNotes()
         loadCategories()
+        loadFolders()
+    }
+}
+
+// MARK: - Enums
+enum NoteSortOption: String, CaseIterable {
+    case createdDate = "Created Date"
+    case modifiedDate = "Modified Date"
+    case title = "Title"
+    case category = "Category"
+    
+    var systemImageName: String {
+        switch self {
+        case .createdDate: return "calendar.badge.plus"
+        case .modifiedDate: return "calendar.badge.clock"
+        case .title: return "textformat.abc"
+        case .category: return "folder"
+        }
+    }
+}
+
+enum ViewMode: String, CaseIterable {
+    case list = "List"
+    case grid = "Grid"
+    
+    var systemImageName: String {
+        switch self {
+        case .list: return "list.bullet"
+        case .grid: return "square.grid.2x2"
+        }
     }
 }

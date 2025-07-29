@@ -14,6 +14,8 @@ struct VoiceRecorderView: View {
     @State private var showingNoteEditor = false
     @State private var recordedNote: Note?
     
+    let currentFolder: Folder?
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 30) {
@@ -145,24 +147,28 @@ struct VoiceRecorderView: View {
                 let noteTitle = processedContent?.summary.prefix(50).description ??
                                (audioURL != nil ? "Voice Note \(Date().formatted(date: .omitted, time: .shortened))" : "Voice Note")
 
-                let note = Note(
+                // Save the note to database using DataManager with full voice note metadata
+                let dataManager = DataManager.shared
+                let savedNote = dataManager.createVoiceNote(
                     title: noteTitle,
                     content: finalTranscript,
                     audioURL: audioURL,
-                    tags: processedContent?.suggestedTags ?? ["voice", "recording"],
-                    category: processedContent?.suggestedCategory ?? Category(name: "Voice Notes", color: "#FF6B6B"),
+                    transcript: finalTranscript,
+                    tags: ["voice", "recording"],
+                    category: Category(name: "Voice Notes", color: "#FF6B6B"),
+                    folderId: currentFolder?.id,
                     aiSummary: processedContent?.summary,
                     keyPoints: processedContent?.keyPoints ?? [],
-                    actionItems: processedContent?.actionItems ?? [],
-                    transcript: finalTranscript  // Ensure transcript is saved with the same content
+                    actionItems: processedContent?.actionItems ?? []
                 )
 
-                print("🎤 Note created: '\(note.title)' with content: '\(note.content.prefix(50))...'")
+                print("🎤 Note saved to database: '\(savedNote.title)' with content: '\(savedNote.content.prefix(50))...'")
+                print("🎤 Note folder ID: \(savedNote.folderId?.uuidString ?? "root")")
 
-                recordedNote = note
+                recordedNote = savedNote
                 showingNoteEditor = true
                 
-                // Notify that a new note will be created
+                // Notify that a new note was created
                 NotificationCenter.default.post(name: Notification.Name("NotesDidChange"), object: nil)
 
                 print("🎤 showingNoteEditor set to true")
@@ -563,5 +569,5 @@ struct ImagePicker: UIViewControllerRepresentable {
 }
 
 #Preview {
-    VoiceRecorderView()
+    VoiceRecorderView(currentFolder: nil)
 }

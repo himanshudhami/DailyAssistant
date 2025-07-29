@@ -266,5 +266,5 @@ struct AuthenticationButtons: View {
 
 #Preview {
     ContentView()
-        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+        .environment(\.managedObjectContext, DataManager.preview.context)
 }

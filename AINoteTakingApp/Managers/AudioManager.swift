@@ -308,22 +308,26 @@ class AudioManager: NSObject, ObservableObject {
 
 // MARK: - AVAudioRecorderDelegate
 extension AudioManager: AVAudioRecorderDelegate {
-    func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
-        if !flag {
-            errorMessage = "Recording failed"
+    nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        Task { @MainActor in
+            if !flag {
+                errorMessage = "Recording failed"
+            }
         }
     }
     
-    func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
-        if let error = error {
-            errorMessage = "Recording encode error: \(error.localizedDescription)"
+    nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
+        Task { @MainActor in
+            if let error = error {
+                errorMessage = "Recording encode error: \(error.localizedDescription)"
+            }
         }
     }
 }
 
 // MARK: - AVAudioPlayerDelegate
 extension AudioManager: AVAudioPlayerDelegate {
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             isPlaying = false
             playbackProgress = 0
@@ -332,7 +336,7 @@ extension AudioManager: AVAudioPlayerDelegate {
         }
     }
     
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         Task { @MainActor in
             if let error = error {
                 errorMessage = "Playback decode error: \(error.localizedDescription)"
@@ -343,7 +347,7 @@ extension AudioManager: AVAudioPlayerDelegate {
 
 // MARK: - SFSpeechRecognizerDelegate
 extension AudioManager: SFSpeechRecognizerDelegate {
-    func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
+    nonisolated func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
         Task { @MainActor in
             if !available {
                 errorMessage = "Speech recognizer became unavailable"

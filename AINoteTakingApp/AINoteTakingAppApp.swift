@@ -10,16 +10,18 @@ import CoreData
 
 @main
 struct AINoteTakingAppApp: App {
-    let persistenceController = PersistenceController.shared
+    let dataManager = DataManager.shared
     @StateObject private var appState = AppState()
     @StateObject private var themeManager = AppThemeManager()
+    @StateObject private var folderManager = FolderManager()
 
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                .environment(\.managedObjectContext, dataManager.context)
                 .environmentObject(appState)
                 .environmentObject(themeManager)
+                .environmentObject(folderManager)
                 .environment(\.appTheme, themeManager.currentTheme)
                 .preferredColorScheme(appState.currentTheme.colorScheme)
         }
@@ -46,46 +48,28 @@ struct RootView: View {
     }
 }
 
-// MARK: - Core Data Stack
-class PersistenceController {
-    static let shared = PersistenceController()
-
-    static var preview: PersistenceController = {
-        let result = PersistenceController(inMemory: true)
-        let viewContext = result.container.viewContext
+// MARK: - Preview Support
+extension DataManager {
+    static var preview: DataManager = {
+        // For previews, we can use the shared instance or create a separate one
+        let manager = DataManager.shared
+        let context = manager.context
         
         // Add sample data for previews
-        let sampleNote = NoteEntity(context: viewContext)
-        sampleNote.id = UUID()
-        sampleNote.title = "Sample Note"
-        sampleNote.content = "This is a sample note for preview purposes."
-        sampleNote.createdDate = Date()
-        sampleNote.modifiedDate = Date()
-        sampleNote.tags = "sample,preview"
+        let sampleFolder = FolderEntity(context: context)
+        let folder = Folder(name: "Sample Folder", sentiment: .positive, noteCount: 1)
+        folder.updateEntity(sampleFolder, context: context)
         
-        do {
-            try viewContext.save()
-        } catch {
-            let nsError = error as NSError
-            fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-        }
-        return result
+        let sampleNote = NoteEntity(context: context)
+        let note = Note(
+            title: "Sample Note",
+            content: "This is a sample note for preview purposes.",
+            folderId: folder.id
+        )
+        note.updateEntity(sampleNote, context: context)
+        sampleNote.folder = sampleFolder
+        
+        try? context.save()
+        return manager
     }()
-
-    let container: NSPersistentContainer
-
-    init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "DataModel")
-        if inMemory {
-            container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
-        }
-        
-        container.loadPersistentStores(completionHandler: { (storeDescription, error) in
-            if let error = error as NSError? {
-                fatalError("Unresolved error \(error), \(error.userInfo)")
-            }
-        })
-        
-        container.viewContext.automaticallyMergesChangesFromParent = true
-    }
 }

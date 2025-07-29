@@ -138,8 +138,6 @@ struct AIAssistantView: View {
                 if messages.isEmpty {
                     addWelcomeMessage()
                 }
-                // Load notes when view appears
-                notesViewModel.loadNotes()
                 // Setup speech recognition
                 setupSpeechRecognition()
             }
@@ -188,7 +186,8 @@ struct AIAssistantView: View {
     }
     
     private func addWelcomeMessage() {
-        let noteCount = notesViewModel.notes.count
+        let dataManager = DataManager.shared
+        let noteCount = dataManager.fetchAllNotes().count
         let contextualGreeting = generateContextualGreeting(noteCount: noteCount)
 
         let welcomeMessage = ChatMessage(
@@ -282,7 +281,9 @@ struct AIAssistantView: View {
     
     private func processUserMessage(_ message: String) async -> (String, [AIAction], [Note]) {
         let lowercased = message.lowercased()
-        let availableNotes = notesViewModel.notes
+        // Use DataManager to get ALL notes from all folders for AI assistant
+        let dataManager = DataManager.shared
+        let availableNotes = dataManager.fetchAllNotes() // Get all notes across all folders
 
         // Navigation and direct actions
         if lowercased.contains("open") || lowercased.contains("show me") {
@@ -358,7 +359,8 @@ struct AIAssistantView: View {
     }
 
     private func processAction(_ action: AIAction) async -> (String, [AIAction], [Note]) {
-        let availableNotes = notesViewModel.notes
+        let dataManager = DataManager.shared
+        let availableNotes = dataManager.fetchAllNotes() // Get all notes across all folders
 
         switch action {
         case .summarizeAll:
@@ -515,12 +517,12 @@ struct AIAssistantView: View {
     }
 
     private func searchNotes(_ searchTerms: [String], in notes: [Note]) -> [Note] {
-        return notes.filter { note in
-            let searchableContent = "\(note.title) \(note.content) \(note.tags.joined(separator: " "))".lowercased()
-            return searchTerms.contains { term in
-                searchableContent.contains(term.lowercased())
-            }
-        }
+        if searchTerms.isEmpty { return notes }
+        
+        // Use the enhanced DataManager search method for comprehensive search
+        let dataManager = DataManager.shared
+        let query = searchTerms.joined(separator: " ")
+        return dataManager.searchAllNotes(query: query)
     }
 
     private func handleSummarizeRequest(_ message: String, notes: [Note]) async -> (String, [AIAction], [Note]) {

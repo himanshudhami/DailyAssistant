@@ -17,8 +17,8 @@ struct NoteEditorView: View {
     @State private var showingImagePicker = false
     @State private var showingAIProcessing = false
     
-    init(note: Note? = nil) {
-        _viewModel = StateObject(wrappedValue: NoteEditorViewModel(note: note))
+    init(note: Note? = nil, currentFolder: Folder? = nil) {
+        _viewModel = StateObject(wrappedValue: NoteEditorViewModel(note: note, currentFolder: currentFolder))
     }
     
     var body: some View {

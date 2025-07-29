@@ -2,11 +2,100 @@
 //  Note.swift
 //  AINoteTakingApp
 //
-//  Created by AI Assistant on 2024-01-01.
+//  Core data models for the note-taking application with hierarchical organization.
+//  Defines Note, Folder, Category, Attachment, and ActionItem structures.
+//  Includes Core Data extensions for SQLite database integration.
+//
+//  Created by AI Assistant on 2025-01-29.
 //
 
 import Foundation
 import CoreData
+
+// MARK: - Folder Model
+struct Folder: Codable, Identifiable, Hashable {
+    let id: UUID
+    var name: String
+    var parentFolderId: UUID?
+    var createdDate: Date
+    var modifiedDate: Date
+    var sortOrder: Int
+    var sentiment: FolderSentiment
+    var noteCount: Int
+    
+    init(
+        id: UUID = UUID(),
+        name: String,
+        parentFolderId: UUID? = nil,
+        createdDate: Date = Date(),
+        modifiedDate: Date = Date(),
+        sortOrder: Int = 0,
+        sentiment: FolderSentiment = .neutral,
+        noteCount: Int = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.parentFolderId = parentFolderId
+        self.createdDate = createdDate
+        self.modifiedDate = modifiedDate
+        self.sortOrder = sortOrder
+        self.sentiment = sentiment
+        self.noteCount = noteCount
+    }
+    
+    var gradientColors: [String] {
+        return sentiment.gradientColors
+    }
+}
+
+// MARK: - Folder Sentiment Enum
+enum FolderSentiment: String, Codable, CaseIterable {
+    case veryPositive = "very_positive"
+    case positive = "positive"
+    case neutral = "neutral"
+    case negative = "negative"
+    case veryNegative = "very_negative"
+    case mixed = "mixed"
+    
+    var displayName: String {
+        switch self {
+        case .veryPositive: return "Very Positive"
+        case .positive: return "Positive"
+        case .neutral: return "Neutral"
+        case .negative: return "Negative"
+        case .veryNegative: return "Very Negative"
+        case .mixed: return "Mixed"
+        }
+    }
+    
+    var gradientColors: [String] {
+        switch self {
+        case .veryPositive:
+            return ["#FFD700", "#FFA500", "#FF6B6B"] // Gold to Orange to Light Red
+        case .positive:
+            return ["#98FB98", "#87CEEB", "#DDA0DD"] // Light Green to Sky Blue to Plum
+        case .neutral:
+            return ["#F0F8FF", "#E6E6FA", "#D3D3D3"] // Alice Blue to Lavender to Light Gray
+        case .negative:
+            return ["#B0C4DE", "#778899", "#696969"] // Light Steel Blue to Light Slate Gray to Dim Gray
+        case .veryNegative:
+            return ["#8B0000", "#A0522D", "#2F4F4F"] // Dark Red to Saddle Brown to Dark Slate Gray
+        case .mixed:
+            return ["#FF69B4", "#9370DB", "#4169E1"] // Hot Pink to Medium Purple to Royal Blue
+        }
+    }
+    
+    var emoji: String {
+        switch self {
+        case .veryPositive: return "🌟"
+        case .positive: return "😊"
+        case .neutral: return "📁"
+        case .negative: return "😔"
+        case .veryNegative: return "😰"
+        case .mixed: return "🎭"
+        }
+    }
+}
 
 // MARK: - Note Model
 struct Note: Codable, Identifiable, Hashable {
@@ -17,6 +106,7 @@ struct Note: Codable, Identifiable, Hashable {
     var attachments: [Attachment]
     var tags: [String]
     var category: Category?
+    var folderId: UUID?
     var createdDate: Date
     var modifiedDate: Date
     var aiSummary: String?
@@ -32,6 +122,7 @@ struct Note: Codable, Identifiable, Hashable {
         attachments: [Attachment] = [],
         tags: [String] = [],
         category: Category? = nil,
+        folderId: UUID? = nil,
         createdDate: Date = Date(),
         modifiedDate: Date = Date(),
         aiSummary: String? = nil,
@@ -46,6 +137,7 @@ struct Note: Codable, Identifiable, Hashable {
         self.attachments = attachments
         self.tags = tags
         self.category = category
+        self.folderId = folderId
         self.createdDate = createdDate
         self.modifiedDate = modifiedDate
         self.aiSummary = aiSummary
@@ -198,6 +290,37 @@ enum Priority: Int, Codable, CaseIterable {
 }
 
 // MARK: - Core Data Extensions
+extension Folder {
+    init(from entity: FolderEntity) {
+        self.id = entity.id ?? UUID()
+        self.name = entity.name ?? ""
+        self.parentFolderId = entity.parentFolder?.id
+        self.createdDate = entity.createdDate ?? Date()
+        self.modifiedDate = entity.modifiedDate ?? Date()
+        self.sortOrder = Int(entity.sortOrder)
+        self.sentiment = FolderSentiment(rawValue: entity.sentiment ?? "neutral") ?? .neutral
+        self.noteCount = Int(entity.noteCount)
+    }
+    
+    func updateEntity(_ entity: FolderEntity, context: NSManagedObjectContext) {
+        entity.id = self.id
+        entity.name = self.name
+        entity.createdDate = self.createdDate
+        entity.modifiedDate = self.modifiedDate
+        entity.sortOrder = Int32(self.sortOrder)
+        entity.sentiment = self.sentiment.rawValue
+        entity.noteCount = Int32(self.noteCount)
+        
+        if let parentId = self.parentFolderId {
+            let request: NSFetchRequest<FolderEntity> = FolderEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", parentId as CVarArg)
+            entity.parentFolder = try? context.fetch(request).first
+        } else {
+            entity.parentFolder = nil
+        }
+    }
+}
+
 extension Note {
     init(from entity: NoteEntity) {
         self.id = entity.id ?? UUID()
@@ -210,6 +333,7 @@ extension Note {
         } ?? []
         self.tags = entity.tags?.components(separatedBy: ",").filter { !$0.isEmpty } ?? []
         self.category = entity.category.map { Category(from: $0) }
+        self.folderId = entity.folder?.id
         self.createdDate = entity.createdDate ?? Date()
         self.modifiedDate = entity.modifiedDate ?? Date()
         self.aiSummary = entity.aiSummary
@@ -221,7 +345,7 @@ extension Note {
         self.transcript = entity.transcript
     }
     
-    func updateEntity(_ entity: NoteEntity) {
+    func updateEntity(_ entity: NoteEntity, context: NSManagedObjectContext) {
         entity.id = self.id
         entity.title = self.title
         entity.content = self.content
@@ -232,6 +356,14 @@ extension Note {
         entity.aiSummary = self.aiSummary
         entity.keyPoints = self.keyPoints.joined(separator: "\n")
         entity.transcript = self.transcript
+        
+        if let folderId = self.folderId {
+            let request: NSFetchRequest<FolderEntity> = FolderEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", folderId as CVarArg)
+            entity.folder = try? context.fetch(request).first
+        } else {
+            entity.folder = nil
+        }
     }
 }
 

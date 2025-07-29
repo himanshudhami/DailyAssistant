@@ -11,6 +11,9 @@
 		A1234567890123456789005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789006 /* Assets.xcassets */; };
 		A1234567890123456789007 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789008 /* Preview Assets.xcassets */; };
 		A1234567890123456789009 /* DataModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789010 /* DataModel.xcdatamodeld */; };
+		C657B01A2E38431400A40BDC /* FolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B0192E38431400A40BDC /* FolderView.swift */; };
+		C657B01D2E39844200A40BDC /* FolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B01C2E39844200A40BDC /* FolderManager.swift */; };
+		C657B01E2E39844200A40BDC /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B01B2E39844200A40BDC /* DataManager.swift */; };
 		C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */; };
 		C681F37B2E37A803000A7FB3 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36B2E37A803000A7FB3 /* Constants.swift */; };
 		C681F37D2E37A803000A7FB3 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3652E37A803000A7FB3 /* AudioManager.swift */; };
@@ -18,8 +21,6 @@
 		C681F37F2E37A803000A7FB3 /* PermissionsOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */; };
 		C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3722E37A803000A7FB3 /* AIAssistantView.swift */; };
 		C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3732E37A803000A7FB3 /* ContentView.swift */; };
-		DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */; };
-		EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091A27012A9941A38EB6AA24 /* SettingsView.swift */; };
 		C681F3822E37A803000A7FB3 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3692E37A803000A7FB3 /* Note.swift */; };
 		C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */; };
 		C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3662E37A803000A7FB3 /* FileImportManager.swift */; };
@@ -29,15 +30,22 @@
 		C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3672E37A803000A7FB3 /* SecurityManager.swift */; };
 		C681F3892E37A803000A7FB3 /* SystemIntegrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36D2E37A803000A7FB3 /* SystemIntegrations.swift */; };
 		C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3752E37A803000A7FB3 /* NotesListView.swift */; };
+		DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */; };
+		EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091A27012A9941A38EB6AA24 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		091A27012A9941A38EB6AA24 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		A1234567890123456789002 /* AINoteTakingAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AINoteTakingAppApp.swift; sourceTree = "<group>"; };
 		A1234567890123456789006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1234567890123456789008 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		A1234567890123456789011 /* DataModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = DataModel.xcdatamodel; sourceTree = "<group>"; };
 		A1234567890123456789012 /* AINoteTakingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AINoteTakingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1234567890123456789013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C657B0192E38431400A40BDC /* FolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderView.swift; sourceTree = "<group>"; };
+		C657B01B2E39844200A40BDC /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
+		C657B01C2E39844200A40BDC /* FolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderManager.swift; sourceTree = "<group>"; };
 		C681F3642E37A803000A7FB3 /* AIProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProcessor.swift; sourceTree = "<group>"; };
 		C681F3652E37A803000A7FB3 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		C681F3662E37A803000A7FB3 /* FileImportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileImportManager.swift; sourceTree = "<group>"; };
@@ -54,8 +62,6 @@
 		C681F3752E37A803000A7FB3 /* NotesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListView.swift; sourceTree = "<group>"; };
 		C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsOnboardingView.swift; sourceTree = "<group>"; };
 		C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorderView.swift; sourceTree = "<group>"; };
-		1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
-		091A27012A9941A38EB6AA24 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -102,7 +108,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-
 		A1234567890123456789023 /* Preview Content */ = {
 			isa = PBXGroup;
 			children = (
@@ -114,6 +119,8 @@
 		C681F3682E37A803000A7FB3 /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				C657B01B2E39844200A40BDC /* DataManager.swift */,
+				C657B01C2E39844200A40BDC /* FolderManager.swift */,
 				C681F3642E37A803000A7FB3 /* AIProcessor.swift */,
 				C681F3652E37A803000A7FB3 /* AudioManager.swift */,
 				C681F3662E37A803000A7FB3 /* FileImportManager.swift */,
@@ -152,6 +159,7 @@
 		C681F3782E37A803000A7FB3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C657B0192E38431400A40BDC /* FolderView.swift */,
 				C681F3722E37A803000A7FB3 /* AIAssistantView.swift */,
 				C681F3732E37A803000A7FB3 /* ContentView.swift */,
 				C681F3742E37A803000A7FB3 /* NoteEditorView.swift */,
@@ -192,7 +200,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 1630;
 				TargetAttributes = {
 					A1234567890123456789024 = {
 						CreatedOnToolsVersion = 15.0;
@@ -234,6 +242,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C657B01D2E39844200A40BDC /* FolderManager.swift in Sources */,
+				C657B01E2E39844200A40BDC /* DataManager.swift in Sources */,
 				A1234567890123456789001 /* AINoteTakingAppApp.swift in Sources */,
 				A1234567890123456789009 /* DataModel.xcdatamodeld in Sources */,
 				C681F3822E37A803000A7FB3 /* Note.swift in Sources */,
@@ -242,6 +252,7 @@
 				C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */,
 				C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */,
 				C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */,
+				C657B01A2E38431400A40BDC /* FolderView.swift in Sources */,
 				C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */,
 				C681F3852E37A803000A7FB3 /* NoteEditorView.swift in Sources */,
 				C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */,
@@ -295,6 +306,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 46TQGQG9PH;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -331,7 +343,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"AINoteTakingApp/Preview Content\"";
-				DEVELOPMENT_TEAM = 46TQGQG9PH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AINoteTakingApp/Info.plist;
@@ -391,6 +402,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 46TQGQG9PH;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -420,7 +432,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"AINoteTakingApp/Preview Content\"";
-				DEVELOPMENT_TEAM = 46TQGQG9PH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AINoteTakingApp/Info.plist;

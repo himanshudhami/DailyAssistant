@@ -55,14 +55,16 @@ class NoteEditorViewModel: ObservableObject {
     
     // MARK: - Private Properties
     private let originalNote: Note?
-    private let persistenceController = PersistenceController.shared
+    private let currentFolder: Folder?
+    private let dataManager = DataManager.shared
     private let aiProcessor = AIProcessor()
     private let fileImportManager = FileImportManager()
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
-    init(note: Note? = nil) {
+    init(note: Note? = nil, currentFolder: Folder? = nil) {
         self.originalNote = note
+        self.currentFolder = currentFolder
         
         if let note = note {
             loadNoteData(note)
@@ -93,33 +95,41 @@ class NoteEditorViewModel: ObservableObject {
     func saveNote() async {
         guard hasContent else { return }
         
-        isSaving = true
-        errorMessage = nil
+        await MainActor.run {
+            self.isSaving = true
+            self.errorMessage = nil
+        }
         
-        do {
-            let noteToSave = createNoteFromCurrentData()
-            try await saveNoteToCoreData(noteToSave)
-            
-            await MainActor.run {
-                self.isSaving = false
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "Failed to save note: \(error.localizedDescription)"
-                self.isSaving = false
-            }
+        let noteToSave = createNoteFromCurrentData()
+        
+        if originalNote != nil {
+            dataManager.updateNote(noteToSave)
+        } else {
+            let _ = dataManager.createNote(
+                title: noteToSave.title,
+                content: noteToSave.content,
+                folderId: noteToSave.folderId
+            )
+        }
+        
+        await MainActor.run {
+            self.isSaving = false
         }
     }
     
     private func autoSave() async {
         guard hasChanges && hasContent && !isSaving else { return }
         
-        do {
-            let noteToSave = createNoteFromCurrentData()
-            try await saveNoteToCoreData(noteToSave)
-        } catch {
-            // Silent auto-save failure
-            print("Auto-save failed: \(error.localizedDescription)")
+        let noteToSave = createNoteFromCurrentData()
+        
+        if originalNote != nil {
+            dataManager.updateNote(noteToSave)
+        } else {
+            let _ = dataManager.createNote(
+                title: noteToSave.title,
+                content: noteToSave.content,
+                folderId: noteToSave.folderId
+            )
         }
     }
     
@@ -135,6 +145,7 @@ class NoteEditorViewModel: ObservableObject {
             attachments: attachments,
             tags: tags,
             category: selectedCategory,
+            folderId: originalNote?.folderId ?? currentFolder?.id,
             createdDate: createdDate,
             modifiedDate: Date(),
             aiSummary: aiSummary,
@@ -144,72 +155,6 @@ class NoteEditorViewModel: ObservableObject {
         )
     }
     
-    private func saveNoteToCoreData(_ note: Note) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            let context = persistenceController.container.viewContext
-            
-            // Find existing note or create new one
-            let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
-            request.predicate = NSPredicate(format: "id == %@", note.id as CVarArg)
-            
-            do {
-                let existingEntities = try context.fetch(request)
-                let noteEntity = existingEntities.first ?? NoteEntity(context: context)
-                
-                note.updateEntity(noteEntity)
-                
-                // Handle category relationship
-                if let category = note.category {
-                    let categoryRequest: NSFetchRequest<CategoryEntity> = CategoryEntity.fetchRequest()
-                    categoryRequest.predicate = NSPredicate(format: "id == %@", category.id as CVarArg)
-                    
-                    if let categoryEntity = try context.fetch(categoryRequest).first {
-                        noteEntity.category = categoryEntity
-                    } else {
-                        // Create new category if it doesn't exist
-                        let newCategoryEntity = CategoryEntity(context: context)
-                        category.updateEntity(newCategoryEntity)
-                        noteEntity.category = newCategoryEntity
-                    }
-                }
-                
-                // Handle attachments
-                // Remove existing attachments
-                if let existingAttachments = noteEntity.attachments {
-                    for attachment in existingAttachments {
-                        context.delete(attachment as! NSManagedObject)
-                    }
-                }
-                
-                // Add current attachments
-                for attachment in note.attachments {
-                    let attachmentEntity = AttachmentEntity(context: context)
-                    attachment.updateEntity(attachmentEntity)
-                    noteEntity.addToAttachments(attachmentEntity)
-                }
-                
-                // Handle action items
-                // Remove existing action items
-                if let existingActionItems = noteEntity.actionItems {
-                    for actionItem in existingActionItems {
-                        context.delete(actionItem as! NSManagedObject)
-                    }
-                }
-                
-                // Add current action items
-                for actionItem in note.actionItems {
-                    let actionItemEntity = ActionItemEntity(context: context)
-                    actionItem.updateEntity(actionItemEntity)
-                    noteEntity.addToActionItems(actionItemEntity)
-                }
-                
-                try context.save()
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
-    }
     
     // MARK: - AI Processing
     func processWithAI() async {
@@ -218,19 +163,12 @@ class NoteEditorViewModel: ObservableObject {
         isProcessing = true
         errorMessage = nil
         
-        do {
-            let fullContent = content + " " + (transcript ?? "")
-            let processedContent = await aiProcessor.processContent(fullContent)
-            
-            await MainActor.run {
-                self.applyAIProcessing(processedContent)
-                self.isProcessing = false
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "AI processing failed: \(error.localizedDescription)"
-                self.isProcessing = false
-            }
+        let fullContent = content + " " + (transcript ?? "")
+        let processedContent = await aiProcessor.processContent(fullContent)
+        
+        await MainActor.run {
+            self.applyAIProcessing(processedContent)
+            self.isProcessing = false
         }
     }
     

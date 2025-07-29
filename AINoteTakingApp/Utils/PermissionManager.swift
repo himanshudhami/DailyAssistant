@@ -171,6 +171,10 @@ class PermissionManager: NSObject, ObservableObject {
             calendarStatus = .restricted
         case .notDetermined:
             calendarStatus = .notDetermined
+        case .fullAccess:
+            calendarStatus = .granted
+        case .writeOnly:
+            calendarStatus = .granted
         @unknown default:
             calendarStatus = .notDetermined
         }
@@ -387,12 +391,14 @@ class PermissionManager: NSObject, ObservableObject {
 
 // MARK: - CLLocationManagerDelegate
 extension PermissionManager: CLLocationManagerDelegate {
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        checkLocationPermission()
-        
-        if let continuation = locationPermissionContinuation {
-            locationPermissionContinuation = nil
-            continuation.resume(returning: locationStatus.isGranted)
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor in
+            checkLocationPermission()
+            
+            if let continuation = locationPermissionContinuation {
+                locationPermissionContinuation = nil
+                continuation.resume(returning: locationStatus.isGranted)
+            }
         }
     }
 }

@@ -29,6 +29,18 @@
         <attribute name="sortOrder" optional="YES" attributeType="Integer 16" defaultValue="0" usesScalarValueType="YES"/>
         <relationship name="notes" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="NoteEntity" inverseName="category" inverseEntity="NoteEntity"/>
     </entity>
+    <entity name="FolderEntity" representedClassName="FolderEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="modifiedDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="noteCount" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <attribute name="sentiment" optional="YES" attributeType="String"/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValue="0" usesScalarValueType="YES"/>
+        <relationship name="childFolders" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="FolderEntity" inverseName="parentFolder" inverseEntity="FolderEntity"/>
+        <relationship name="notes" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="NoteEntity" inverseName="folder" inverseEntity="NoteEntity"/>
+        <relationship name="parentFolder" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FolderEntity" inverseName="childFolders" inverseEntity="FolderEntity"/>
+    </entity>
     <entity name="NoteEntity" representedClassName="NoteEntity" syncable="YES" codeGenerationType="class">
         <attribute name="aiSummary" optional="YES" attributeType="String"/>
         <attribute name="audioURL" optional="YES" attributeType="URI"/>
@@ -43,5 +55,6 @@
         <relationship name="actionItems" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ActionItemEntity" inverseName="note" inverseEntity="ActionItemEntity"/>
         <relationship name="attachments" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="AttachmentEntity" inverseName="note" inverseEntity="AttachmentEntity"/>
         <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CategoryEntity" inverseName="notes" inverseEntity="CategoryEntity"/>
+        <relationship name="folder" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FolderEntity" inverseName="notes" inverseEntity="FolderEntity"/>
     </entity>
 </model>
