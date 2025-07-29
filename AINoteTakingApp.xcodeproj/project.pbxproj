@@ -11,6 +11,14 @@
 		A1234567890123456789005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789006 /* Assets.xcassets */; };
 		A1234567890123456789007 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789008 /* Preview Assets.xcassets */; };
 		A1234567890123456789009 /* DataModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789010 /* DataModel.xcdatamodeld */; };
+		C61E5FA32E398D4300506179 /* AIAssistantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA12E398D4300506179 /* AIAssistantService.swift */; };
+		C61E5FA92E398D7B00506179 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA42E398D7B00506179 /* AIAssistantView.swift */; };
+		C61E5FAA2E398D7B00506179 /* TypingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA72E398D7B00506179 /* TypingIndicatorView.swift */; };
+		C61E5FAB2E398D7B00506179 /* ChatInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA52E398D7B00506179 /* ChatInputView.swift */; };
+		C61E5FAC2E398D7B00506179 /* ChatMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA62E398D7B00506179 /* ChatMessageView.swift */; };
+		C61E5FAE2E398DC600506179 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FAD2E398DC600506179 /* ChatMessage.swift */; };
+		C61E5FB12E398DEB00506179 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FAF2E398DEB00506179 /* OCRService.swift */; };
+		C61E5FB22E398DEB00506179 /* SpeechRecognitionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */; };
 		C657B01A2E38431400A40BDC /* FolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B0192E38431400A40BDC /* FolderView.swift */; };
 		C657B01D2E39844200A40BDC /* FolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B01C2E39844200A40BDC /* FolderManager.swift */; };
 		C657B01E2E39844200A40BDC /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B01B2E39844200A40BDC /* DataManager.swift */; };
@@ -19,7 +27,6 @@
 		C681F37D2E37A803000A7FB3 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3652E37A803000A7FB3 /* AudioManager.swift */; };
 		C681F37E2E37A803000A7FB3 /* NotesListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */; };
 		C681F37F2E37A803000A7FB3 /* PermissionsOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */; };
-		C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3722E37A803000A7FB3 /* AIAssistantView.swift */; };
 		C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3732E37A803000A7FB3 /* ContentView.swift */; };
 		C681F3822E37A803000A7FB3 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3692E37A803000A7FB3 /* Note.swift */; };
 		C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */; };
@@ -43,6 +50,14 @@
 		A1234567890123456789011 /* DataModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = DataModel.xcdatamodel; sourceTree = "<group>"; };
 		A1234567890123456789012 /* AINoteTakingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AINoteTakingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1234567890123456789013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C61E5FA12E398D4300506179 /* AIAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantService.swift; sourceTree = "<group>"; };
+		C61E5FA42E398D7B00506179 /* AIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
+		C61E5FA52E398D7B00506179 /* ChatInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputView.swift; sourceTree = "<group>"; };
+		C61E5FA62E398D7B00506179 /* ChatMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageView.swift; sourceTree = "<group>"; };
+		C61E5FA72E398D7B00506179 /* TypingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicatorView.swift; sourceTree = "<group>"; };
+		C61E5FAD2E398DC600506179 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		C61E5FAF2E398DEB00506179 /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
+		C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionManager.swift; sourceTree = "<group>"; };
 		C657B0192E38431400A40BDC /* FolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderView.swift; sourceTree = "<group>"; };
 		C657B01B2E39844200A40BDC /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		C657B01C2E39844200A40BDC /* FolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderManager.swift; sourceTree = "<group>"; };
@@ -86,6 +101,7 @@
 		A1234567890123456789016 /* AINoteTakingApp */ = {
 			isa = PBXGroup;
 			children = (
+				C61E5FA22E398D4300506179 /* Services */,
 				A1234567890123456789002 /* AINoteTakingAppApp.swift */,
 				C681F3782E37A803000A7FB3 /* Views */,
 				C681F3712E37A803000A7FB3 /* ViewModels */,
@@ -116,6 +132,27 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
+		C61E5FA22E398D4300506179 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				C61E5FAF2E398DEB00506179 /* OCRService.swift */,
+				C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */,
+				C61E5FA12E398D4300506179 /* AIAssistantService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		C61E5FA82E398D7B00506179 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				C61E5FA42E398D7B00506179 /* AIAssistantView.swift */,
+				C61E5FA52E398D7B00506179 /* ChatInputView.swift */,
+				C61E5FA62E398D7B00506179 /* ChatMessageView.swift */,
+				C61E5FA72E398D7B00506179 /* TypingIndicatorView.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
 		C681F3682E37A803000A7FB3 /* Managers */ = {
 			isa = PBXGroup;
 			children = (
@@ -132,6 +169,7 @@
 		C681F36A2E37A803000A7FB3 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				C61E5FAD2E398DC600506179 /* ChatMessage.swift */,
 				C681F3692E37A803000A7FB3 /* Note.swift */,
 			);
 			path = Models;
@@ -159,6 +197,7 @@
 		C681F3782E37A803000A7FB3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C61E5FA82E398D7B00506179 /* Chat */,
 				C657B0192E38431400A40BDC /* FolderView.swift */,
 				C681F3722E37A803000A7FB3 /* AIAssistantView.swift */,
 				C681F3732E37A803000A7FB3 /* ContentView.swift */,
@@ -253,11 +292,19 @@
 				C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */,
 				C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */,
 				C657B01A2E38431400A40BDC /* FolderView.swift in Sources */,
+				C61E5FA92E398D7B00506179 /* AIAssistantView.swift in Sources */,
+				C61E5FAA2E398D7B00506179 /* TypingIndicatorView.swift in Sources */,
+				C61E5FAB2E398D7B00506179 /* ChatInputView.swift in Sources */,
+				C61E5FAC2E398D7B00506179 /* ChatMessageView.swift in Sources */,
 				C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */,
 				C681F3852E37A803000A7FB3 /* NoteEditorView.swift in Sources */,
+				C61E5FB12E398DEB00506179 /* OCRService.swift in Sources */,
+				C61E5FB22E398DEB00506179 /* SpeechRecognitionManager.swift in Sources */,
 				C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */,
 				C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */,
 				DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */,
+				C61E5FAE2E398DC600506179 /* ChatMessage.swift in Sources */,
+				C61E5FA32E398D4300506179 /* AIAssistantService.swift in Sources */,
 				EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */,
 				C681F37E2E37A803000A7FB3 /* NotesListViewModel.swift in Sources */,
 				C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */,
