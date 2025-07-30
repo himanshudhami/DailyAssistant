@@ -41,6 +41,11 @@
 		C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3752E37A803000A7FB3 /* NotesListView.swift */; };
 		DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */; };
 		EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091A27012A9941A38EB6AA24 /* SettingsView.swift */; };
+		C61E5FBC2E3A140000506179 /* SemanticSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FB92E3A140000506179 /* SemanticSearchService.swift */; };
+		C61E5FBD2E3A140100506179 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FBE2E3A140100506179 /* SearchViewModel.swift */; };
+		C61E5FBF2E3A140200506179 /* SearchComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FC02E3A140200506179 /* SearchComponents.swift */; };
+		C61E5FC12E3A140300506179 /* ImageSearchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FC22E3A140300506179 /* ImageSearchManager.swift */; };
+		C61E5FC32E3A140400506179 /* ImageMetadataIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FC42E3A140400506179 /* ImageMetadataIndex.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +67,11 @@
 		C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionManager.swift; sourceTree = "<group>"; };
 		C61E5FB72E3A139B00506179 /* AttachmentComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentComponents.swift; sourceTree = "<group>"; };
 		C61E5FB82E3A139B00506179 /* SharedImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedImagePicker.swift; sourceTree = "<group>"; };
+		C61E5FB92E3A140000506179 /* SemanticSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchService.swift; sourceTree = "<group>"; };
+		C61E5FBE2E3A140100506179 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
+		C61E5FC02E3A140200506179 /* SearchComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchComponents.swift; sourceTree = "<group>"; };
+		C61E5FC22E3A140300506179 /* ImageSearchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageSearchManager.swift; sourceTree = "<group>"; };
+		C61E5FC42E3A140400506179 /* ImageMetadataIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMetadataIndex.swift; sourceTree = "<group>"; };
 		C657B0192E38431400A40BDC /* FolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderView.swift; sourceTree = "<group>"; };
 		C657B01B2E39844200A40BDC /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		C657B01C2E39844200A40BDC /* FolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderManager.swift; sourceTree = "<group>"; };
@@ -141,6 +151,9 @@
 				C61E5FAF2E398DEB00506179 /* OCRService.swift */,
 				C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */,
 				C61E5FA12E398D4300506179 /* AIAssistantService.swift */,
+				C61E5FB92E3A140000506179 /* SemanticSearchService.swift */,
+				C61E5FC22E3A140300506179 /* ImageSearchManager.swift */,
+				C61E5FC42E3A140400506179 /* ImageMetadataIndex.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -161,6 +174,7 @@
 			children = (
 				C61E5FB72E3A139B00506179 /* AttachmentComponents.swift */,
 				C61E5FB82E3A139B00506179 /* SharedImagePicker.swift */,
+				C61E5FC02E3A140200506179 /* SearchComponents.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -202,6 +216,7 @@
 			children = (
 				C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */,
 				C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */,
+				C61E5FBE2E3A140100506179 /* SearchViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -316,6 +331,11 @@
 				C61E5FB22E398DEB00506179 /* SpeechRecognitionManager.swift in Sources */,
 				C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */,
 				DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */,
+				C61E5FBC2E3A140000506179 /* SemanticSearchService.swift in Sources */,
+				C61E5FBD2E3A140100506179 /* SearchViewModel.swift in Sources */,
+				C61E5FBF2E3A140200506179 /* SearchComponents.swift in Sources */,
+				C61E5FC12E3A140300506179 /* ImageSearchManager.swift in Sources */,
+				C61E5FC32E3A140400506179 /* ImageMetadataIndex.swift in Sources */,
 				C61E5FAE2E398DC600506179 /* ChatMessage.swift in Sources */,
 				C61E5FA32E398D4300506179 /* AIAssistantService.swift in Sources */,
 				EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */,

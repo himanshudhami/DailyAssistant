@@ -11,6 +11,7 @@
 
 import Foundation
 import CoreData
+import SwiftUI
 
 // MARK: - Folder Model
 struct Folder: Codable, Identifiable, Hashable {
@@ -468,3 +469,4 @@ extension ActionItem {
         entity.createdDate = self.createdDate
     }
 }
+

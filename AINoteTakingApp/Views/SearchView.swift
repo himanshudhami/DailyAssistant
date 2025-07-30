@@ -2,249 +2,199 @@
 //  SearchView.swift
 //  AINoteTakingApp
 //
+//  Enhanced search view with semantic search, image search, and proper keyboard handling.
+//  Integrates with SemanticSearchService for intelligent note discovery.
+//  Follows clean architecture with proper separation of concerns.
+//
 //  Created by AI Assistant on 2024-01-01.
+//  Enhanced on 2025-01-30.
 //
 
 import SwiftUI
 
 struct SearchView: View {
-    @State private var searchText = ""
-    @State private var searchResults: [Note] = []
-    @State private var isSearching = false
-    @State private var selectedFilters: Set<SearchFilter> = []
-    @EnvironmentObject var notesViewModel: NotesListViewModel
+    @StateObject private var viewModel = SearchViewModel()
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedNote: Note?
+    @State private var showingNoteEditor = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Search Bar
-                SearchBar(
-                    text: $searchText,
-                    isSearching: $isSearching,
-                    onSearchChanged: performSearch
+                // Enhanced Search Bar with keyboard dismissal
+                EnhancedSearchBar(
+                    text: $viewModel.searchText,
+                    isSearching: $viewModel.isSearching,
+                    onSearchChanged: { _ in
+                        // Search is handled automatically by viewModel debouncing
+                    },
+                    onClear: {
+                        viewModel.clearSearch()
+                    }
                 )
                 
-                // Filters
-                SearchFiltersView(selectedFilters: $selectedFilters) {
-                    performSearch(searchText)
+                // Search Filters
+                SearchFiltersView(selectedFilters: $viewModel.selectedFilters) {
+                    // Filters are applied automatically through computed property
                 }
                 
-                // Results
-                if isSearching {
-                    ProgressView("Searching...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if searchResults.isEmpty && !searchText.isEmpty {
-                    EmptySearchView()
-                } else if !searchResults.isEmpty {
-                    SearchResultsList(results: searchResults)
-                } else {
-                    SearchSuggestionsView(onSuggestionTapped: { suggestion in
-                        searchText = suggestion
-                        performSearch(suggestion)
-                    })
+                // Main Content
+                ScrollView {
+                    if viewModel.isSearching {
+                        SearchingIndicator()
+                    } else if viewModel.hasActiveSearch {
+                        if viewModel.hasResults {
+                            SearchResultsList(
+                                results: viewModel.filteredResults,
+                                onNoteSelected: handleNoteSelection
+                            )
+                        } else {
+                            EmptySearchView(hasActiveSearch: true)
+                        }
+                    } else {
+                        SearchHomeContent(
+                            recentSearches: viewModel.recentSearches,
+                            onSearchSelected: viewModel.selectRecentSearch,
+                            onSearchRemoved: viewModel.removeRecentSearch,
+                            onSuggestionTapped: { suggestion in
+                                viewModel.searchText = suggestion
+                            }
+                        )
+                    }
                 }
             }
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.large)
-        }
-    }
-    
-    private func performSearch(_ query: String) {
-        guard !query.isEmpty else {
-            searchResults = []
-            return
-        }
-        
-        isSearching = true
-        
-        // Perform actual search through notes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            let lowercasedQuery = query.lowercased()
-            searchResults = notesViewModel.notes.filter { note in
-                note.title.lowercased().contains(lowercasedQuery) ||
-                note.content.lowercased().contains(lowercasedQuery) ||
-                note.tags.contains { $0.lowercased().contains(lowercasedQuery) }
-            }
-            isSearching = false
-        }
-    }
-}
-
-struct SearchBar: View {
-    @Binding var text: String
-    @Binding var isSearching: Bool
-    let onSearchChanged: (String) -> Void
-    
-    var body: some View {
-        HStack {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
-                
-                TextField("Search logs, content, tags...", text: $text)
-                    .onSubmit {
-                        onSearchChanged(text)
-                    }
-                    .onChange(of: text) { newValue in
-                        onSearchChanged(newValue)
-                    }
-                
-                if !text.isEmpty {
-                    Button("Clear") {
-                        text = ""
-                        onSearchChanged("")
-                    }
-                    .foregroundColor(.gray)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
-        }
-        .padding()
-    }
-}
-
-enum SearchFilter: String, CaseIterable {
-    case hasAudio = "Audio"
-    case hasAttachments = "Attachments"
-    case hasActionItems = "Tasks"
-    case recent = "Recent"
-    case favorites = "Favorites"
-    
-    var icon: String {
-        switch self {
-        case .hasAudio: return "waveform"
-        case .hasAttachments: return "paperclip"
-        case .hasActionItems: return "checkmark.circle"
-        case .recent: return "clock"
-        case .favorites: return "heart"
-        }
-    }
-}
-
-struct SearchFiltersView: View {
-    @Binding var selectedFilters: Set<SearchFilter>
-    let onFiltersChanged: () -> Void
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(SearchFilter.allCases, id: \.self) { filter in
-                    FilterChip(
-                        filter: filter,
-                        isSelected: selectedFilters.contains(filter)
-                    ) {
-                        if selectedFilters.contains(filter) {
-                            selectedFilters.remove(filter)
-                        } else {
-                            selectedFilters.insert(filter)
-                        }
-                        onFiltersChanged()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
             }
-            .padding(.horizontal)
         }
-        .padding(.vertical, 8)
+        .sheet(item: $selectedNote) { note in
+            NoteEditorView(note: note)
+        }
     }
-}
-
-struct FilterChip: View {
-    let filter: SearchFilter
-    let isSelected: Bool
-    let onTap: () -> Void
     
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 4) {
-                Image(systemName: filter.icon)
-                    .font(.caption)
-                Text(filter.rawValue)
-                    .font(.caption)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.blue : Color(.systemGray6))
-            .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(16)
-        }
+    private func handleNoteSelection(_ note: Note) {
+        selectedNote = note
     }
 }
 
-struct EmptySearchView: View {
+// MARK: - Supporting Views
+struct SearchingIndicator: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
             
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            
-            Text("No Results Found")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Try adjusting your search terms or filters")
-                .font(.body)
+            Text("Searching intelligently...")
+                .font(.subheadline)
                 .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+    }
+}
+
+struct SearchHomeContent: View {
+    let recentSearches: [String]
+    let onSearchSelected: (String) -> Void
+    let onSearchRemoved: (String) -> Void
+    let onSuggestionTapped: (String) -> Void
+    
+    var body: some View {
+        VStack(spacing: 32) {
+            // Recent Searches
+            if !recentSearches.isEmpty {
+                RecentSearchesView(
+                    recentSearches: recentSearches,
+                    onSearchSelected: onSearchSelected,
+                    onSearchRemoved: onSearchRemoved
+                )
+            }
+            
+            // Search Suggestions
+            SearchSuggestionsView(onSuggestionTapped: onSuggestionTapped)
+            
+            // Search Tips
+            SearchTipsView()
+        }
+        .padding(.top)
+    }
+}
+
+// MARK: - Search Tips View
+struct SearchTipsView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Search Tips")
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                SearchTipRow(
+                    icon: "brain.head.profile",
+                    color: .blue,
+                    title: "Semantic Search",
+                    description: "Find notes by meaning, not just keywords"
+                )
+                
+                SearchTipRow(
+                    icon: "photo",
+                    color: .purple,
+                    title: "Image Search",
+                    description: "Search for notes containing specific images"
+                )
+                
+                SearchTipRow(
+                    icon: "waveform",
+                    color: .orange,
+                    title: "Audio Content",
+                    description: "Find notes with voice recordings"
+                )
+                
+                SearchTipRow(
+                    icon: "tag",
+                    color: .green,
+                    title: "Smart Filters",
+                    description: "Use filters to narrow down results"
+                )
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.5))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+}
+
+struct SearchTipRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let description: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             Spacer()
         }
-        .padding()
-    }
-}
-
-struct SearchResultsList: View {
-    let results: [Note]
-    
-    var body: some View {
-        List(results) { note in
-            SearchResultRow(note: note)
-        }
-        .listStyle(.plain)
-    }
-}
-
-struct SearchResultRow: View {
-    let note: Note
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(note.title.isEmpty ? "Untitled" : note.title)
-                .font(.headline)
-                .lineLimit(1)
-            
-            if !note.content.isEmpty {
-                Text(note.content)
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-            
-            HStack {
-                Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                if note.audioURL != nil {
-                    Image(systemName: "waveform")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                
-                if !note.attachments.isEmpty {
-                    Image(systemName: "paperclip")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-        }
-        .padding(.vertical, 4)
     }
 }
 
@@ -252,30 +202,31 @@ struct SearchSuggestionsView: View {
     let onSuggestionTapped: (String) -> Void
     
     private let suggestions = [
-        "meeting notes",
-        "action items",
-        "today",
-        "this week",
-        "important",
-        "project",
-        "ideas",
-        "tasks"
+        ("meeting notes", "person.2"),
+        ("action items", "checkmark.circle"),
+        ("today", "calendar"),
+        ("images", "photo"),
+        ("project ideas", "lightbulb"),
+        ("voice notes", "waveform"),
+        ("important", "exclamationmark.circle"),
+        ("this week", "clock")
     ]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Search Suggestions")
+            Text("Popular Searches")
                 .font(.headline)
                 .padding(.horizontal)
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(suggestions, id: \.self) { suggestion in
+                ForEach(suggestions, id: \.0) { suggestion, icon in
                     Button(action: {
                         onSuggestionTapped(suggestion)
                     }) {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
+                        HStack(spacing: 8) {
+                            Image(systemName: icon)
+                                .foregroundColor(.blue)
+                                .font(.callout)
                             Text(suggestion)
                                 .foregroundColor(.primary)
                             Spacer()
@@ -284,11 +235,10 @@ struct SearchSuggestionsView: View {
                         .background(Color(.systemGray6))
                         .cornerRadius(8)
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal)
-            
-            Spacer()
         }
         .padding(.top)
     }
@@ -296,5 +246,4 @@ struct SearchSuggestionsView: View {
 
 #Preview {
     SearchView()
-        .environmentObject(NotesListViewModel())
 }
