@@ -65,10 +65,22 @@ class SpeechRecognitionManager: ObservableObject {
             return
         }
         
+        // Ensure we're not already recording
+        guard !isRecording else {
+            return
+        }
+        
         do {
-            // Cancel previous task
+            // Cancel previous task and reset state
             recognitionTask?.cancel()
             recognitionTask = nil
+            recognitionRequest = nil
+            
+            // Stop audio engine if running
+            if audioEngine.isRunning {
+                audioEngine.stop()
+                audioEngine.reset()
+            }
             
             // Configure audio session
             let audioSession = AVAudioSession.sharedInstance()
@@ -129,13 +141,31 @@ class SpeechRecognitionManager: ObservableObject {
     private func stopRecording() {
         let currentText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        audioEngine.stop()
-        recognitionRequest?.endAudio()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        // Stop audio engine first
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
         
-        recognitionRequest = nil
+        // Remove tap before ending audio
+        if audioEngine.inputNode.numberOfInputs > 0 {
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
+        
+        // End audio request
+        recognitionRequest?.endAudio()
+        
+        // Cancel and clean up recognition task
         recognitionTask?.cancel()
         recognitionTask = nil
+        recognitionRequest = nil
+        
+        // Deactivate audio session properly
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("Failed to deactivate audio session: \(error)")
+        }
+        
         isRecording = false
         justFinishedRecording = true
         
@@ -153,16 +183,31 @@ class SpeechRecognitionManager: ObservableObject {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         self.shouldAutoSend = false
                         self.justFinishedRecording = false
+                        self.resetForNextRecording()
                     }
                 } else {
                     self.justFinishedRecording = false
+                    self.resetForNextRecording()
                 }
             }
         } else {
             justFinishedRecording = false
+            resetForNextRecording()
+        }
+    }
+    
+    private func resetForNextRecording() {
+        // Reset all state for next recording
+        finalTranscription = ""
+        recognizedText = ""
+        errorMessage = nil
+        
+        // Ensure audio engine is properly reset
+        if audioEngine.isRunning {
+            audioEngine.stop()
         }
         
-        // Reset final transcription for next recording
-        finalTranscription = ""
+        // Reset audio engine
+        audioEngine.reset()
     }
 }

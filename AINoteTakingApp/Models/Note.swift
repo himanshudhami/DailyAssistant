@@ -357,12 +357,50 @@ extension Note {
         entity.keyPoints = self.keyPoints.joined(separator: "\n")
         entity.transcript = self.transcript
         
+        // Update folder relationship
         if let folderId = self.folderId {
             let request: NSFetchRequest<FolderEntity> = FolderEntity.fetchRequest()
             request.predicate = NSPredicate(format: "id == %@", folderId as CVarArg)
             entity.folder = try? context.fetch(request).first
         } else {
             entity.folder = nil
+        }
+        
+        // Update attachments
+        if let existingAttachments = entity.attachments {
+            entity.removeFromAttachments(existingAttachments)
+        }
+        
+        for attachment in self.attachments {
+            let attachmentEntity = AttachmentEntity(context: context)
+            attachment.updateEntity(attachmentEntity)
+            entity.addToAttachments(attachmentEntity)
+        }
+        
+        // Update action items
+        if let existingActionItems = entity.actionItems {
+            entity.removeFromActionItems(existingActionItems)
+        }
+        
+        for actionItem in self.actionItems {
+            let actionItemEntity = ActionItemEntity(context: context)
+            actionItem.updateEntity(actionItemEntity)
+            entity.addToActionItems(actionItemEntity)
+        }
+        
+        // Update category
+        if let category = self.category {
+            let categoryRequest: NSFetchRequest<CategoryEntity> = CategoryEntity.fetchRequest()
+            categoryRequest.predicate = NSPredicate(format: "id == %@", category.id as CVarArg)
+            if let existingCategory = try? context.fetch(categoryRequest).first {
+                entity.category = existingCategory
+            } else {
+                let categoryEntity = CategoryEntity(context: context)
+                category.updateEntity(categoryEntity)
+                entity.category = categoryEntity
+            }
+        } else {
+            entity.category = nil
         }
     }
 }

@@ -258,6 +258,18 @@ extension DataManager {
         return note
     }
     
+    func createNoteFromData(_ note: Note) -> Note {
+        let noteEntity = NoteEntity(context: context)
+        note.updateEntity(noteEntity, context: context)
+        save()
+        
+        if let folderId = note.folderId {
+            updateFolderNoteCount(folderId)
+        }
+        
+        return note
+    }
+    
     func fetchNotes(in folder: Folder? = nil) -> [Note] {
         let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
         

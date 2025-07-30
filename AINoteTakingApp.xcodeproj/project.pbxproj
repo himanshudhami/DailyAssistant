@@ -19,6 +19,8 @@
 		C61E5FAE2E398DC600506179 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FAD2E398DC600506179 /* ChatMessage.swift */; };
 		C61E5FB12E398DEB00506179 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FAF2E398DEB00506179 /* OCRService.swift */; };
 		C61E5FB22E398DEB00506179 /* SpeechRecognitionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */; };
+		C61E5FBA2E3A139B00506179 /* AttachmentComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FB72E3A139B00506179 /* AttachmentComponents.swift */; };
+		C61E5FBB2E3A139B00506179 /* SharedImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FB82E3A139B00506179 /* SharedImagePicker.swift */; };
 		C657B01A2E38431400A40BDC /* FolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B0192E38431400A40BDC /* FolderView.swift */; };
 		C657B01D2E39844200A40BDC /* FolderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B01C2E39844200A40BDC /* FolderManager.swift */; };
 		C657B01E2E39844200A40BDC /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C657B01B2E39844200A40BDC /* DataManager.swift */; };
@@ -58,6 +60,8 @@
 		C61E5FAD2E398DC600506179 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		C61E5FAF2E398DEB00506179 /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
 		C61E5FB02E398DEB00506179 /* SpeechRecognitionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionManager.swift; sourceTree = "<group>"; };
+		C61E5FB72E3A139B00506179 /* AttachmentComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentComponents.swift; sourceTree = "<group>"; };
+		C61E5FB82E3A139B00506179 /* SharedImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedImagePicker.swift; sourceTree = "<group>"; };
 		C657B0192E38431400A40BDC /* FolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderView.swift; sourceTree = "<group>"; };
 		C657B01B2E39844200A40BDC /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		C657B01C2E39844200A40BDC /* FolderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderManager.swift; sourceTree = "<group>"; };
@@ -71,7 +75,6 @@
 		C681F36D2E37A803000A7FB3 /* SystemIntegrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemIntegrations.swift; sourceTree = "<group>"; };
 		C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorViewModel.swift; sourceTree = "<group>"; };
 		C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListViewModel.swift; sourceTree = "<group>"; };
-		C681F3722E37A803000A7FB3 /* AIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
 		C681F3732E37A803000A7FB3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C681F3742E37A803000A7FB3 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
 		C681F3752E37A803000A7FB3 /* NotesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListView.swift; sourceTree = "<group>"; };
@@ -153,6 +156,15 @@
 			path = Chat;
 			sourceTree = "<group>";
 		};
+		C61E5FB92E3A139B00506179 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				C61E5FB72E3A139B00506179 /* AttachmentComponents.swift */,
+				C61E5FB82E3A139B00506179 /* SharedImagePicker.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
 		C681F3682E37A803000A7FB3 /* Managers */ = {
 			isa = PBXGroup;
 			children = (
@@ -197,9 +209,9 @@
 		C681F3782E37A803000A7FB3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C61E5FB92E3A139B00506179 /* Components */,
 				C61E5FA82E398D7B00506179 /* Chat */,
 				C657B0192E38431400A40BDC /* FolderView.swift */,
-				C681F3722E37A803000A7FB3 /* AIAssistantView.swift */,
 				C681F3732E37A803000A7FB3 /* ContentView.swift */,
 				C681F3742E37A803000A7FB3 /* NoteEditorView.swift */,
 				C681F3752E37A803000A7FB3 /* NotesListView.swift */,
@@ -288,6 +300,8 @@
 				C681F3822E37A803000A7FB3 /* Note.swift in Sources */,
 				C681F37D2E37A803000A7FB3 /* AudioManager.swift in Sources */,
 				C681F3862E37A803000A7FB3 /* AIProcessor.swift in Sources */,
+				C61E5FBA2E3A139B00506179 /* AttachmentComponents.swift in Sources */,
+				C61E5FBB2E3A139B00506179 /* SharedImagePicker.swift in Sources */,
 				C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */,
 				C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */,
 				C681F3812E37A803000A7FB3 /* ContentView.swift in Sources */,
@@ -301,7 +315,6 @@
 				C61E5FB12E398DEB00506179 /* OCRService.swift in Sources */,
 				C61E5FB22E398DEB00506179 /* SpeechRecognitionManager.swift in Sources */,
 				C681F37A2E37A803000A7FB3 /* VoiceRecorderView.swift in Sources */,
-				C681F3802E37A803000A7FB3 /* AIAssistantView.swift in Sources */,
 				DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */,
 				C61E5FAE2E398DC600506179 /* ChatMessage.swift in Sources */,
 				C61E5FA32E398D4300506179 /* AIAssistantService.swift in Sources */,

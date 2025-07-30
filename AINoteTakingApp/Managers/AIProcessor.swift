@@ -10,6 +10,7 @@
 
 import Foundation
 import NaturalLanguage
+import CoreML
 
 // MARK: - AI Processing Results
 struct ProcessedContent {
@@ -19,11 +20,34 @@ struct ProcessedContent {
     let suggestedTags: [String]
     let suggestedCategory: Category?
     let sentiment: String
+    let sentimentConfidence: Double
+    let categoryConfidence: Double
 }
 
 struct RelatedNotesResult {
     let notes: [Note]
     let similarity: Double
+}
+
+// MARK: - ML Results
+struct ExtractedEntities {
+    let people: [String]
+    let places: [String]
+    let organizations: [String]
+    let actionVerbs: [String]
+    let importantNouns: [String]
+}
+
+struct MLSentimentResult {
+    let sentiment: String
+    let confidence: Double
+    let rawScore: Double
+}
+
+struct MLCategoryResult {
+    let category: String
+    let confidence: Double
+    let alternatives: [(String, Double)]
 }
 
 // MARK: - AI Processor
@@ -38,6 +62,8 @@ class AIProcessor: ObservableObject {
     // MARK: - Private Properties
     private let nlProcessor = NLLanguageRecognizer()
     private let tagger = NLTagger(tagSchemes: [.tokenType, .lexicalClass, .nameType, .sentimentScore])
+    private let coreMLProcessor = CoreMLTextProcessor()
+    private let entityExtractor = MLEntityExtractor()
     
     // MARK: - Configuration
     private struct AIConfig {
@@ -66,31 +92,37 @@ class AIProcessor: ObservableObject {
         
         // Step 2: Extract key points
         await updateProgress(0.4)
-        let keyPoints = await extractKeyPoints(text)
+        let rawKeyPoints = await extractKeyPoints(text)
         
-        // Step 3: Extract action items
+        // Step 3: Remove duplicate content between summary and key points
+        let keyPoints = removeDuplicateContent(summary: summary, keyPoints: rawKeyPoints)
+        
+        // Step 4: Extract action items
         await updateProgress(0.6)
         let actionItems = await extractActionItems(text)
         
-        // Step 4: Suggest tags
+        // Step 5: Suggest tags
         await updateProgress(0.8)
         let suggestedTags = await suggestTags(text)
         
-        // Step 5: Categorize content
+        // Step 6: Categorize content
         await updateProgress(0.9)
         let suggestedCategory = await categorizeContent(text)
         
-        // Step 6: Analyze sentiment
+        // Step 7: Analyze sentiment with confidence
         await updateProgress(1.0)
-        let sentiment = await analyzeSentiment(text)
-        
+        let sentimentResult = await analyzeSentimentWithConfidence(text)
+        let categoryResult = await categorizeContentWithConfidence(text)
+
         return ProcessedContent(
             summary: summary,
             keyPoints: keyPoints,
             actionItems: actionItems,
             suggestedTags: suggestedTags,
-            suggestedCategory: suggestedCategory,
-            sentiment: sentiment
+            suggestedCategory: categoryResult.category,
+            sentiment: sentimentResult.sentiment,
+            sentimentConfidence: sentimentResult.confidence,
+            categoryConfidence: categoryResult.confidence
         )
     }
     
@@ -158,25 +190,20 @@ class AIProcessor: ObservableObject {
     func suggestTags(_ content: String) async -> [String] {
         guard !content.isEmpty else { return [] }
 
-        tagger.string = content
+        // Use ML entity extraction for better tag suggestions
+        let entities = await entityExtractor.extractEntitiesWithML(content)
         var tags: Set<String> = []
 
-        let range = content.startIndex..<content.endIndex
-        tagger.enumerateTags(in: range,
-                           unit: .word,
-                           scheme: .nameType) { tag, tokenRange in
-            if let tag = tag {
-                let substring = String(content[tokenRange])
-                switch tag {
-                case .personalName, .placeName, .organizationName:
-                    tags.insert(substring.lowercased())
-                default:
-                    break
-                }
-            }
-            return true
-        }
+        // Add named entities as tags
+        tags.formUnion(entities.people.map { $0.lowercased() })
+        tags.formUnion(entities.places.map { $0.lowercased() })
+        tags.formUnion(entities.organizations.map { $0.lowercased() })
 
+        // Add important nouns and action verbs
+        tags.formUnion(entities.importantNouns)
+        tags.formUnion(entities.actionVerbs)
+
+        // Add semantic keywords using traditional method as fallback
         let keywords = extractKeywords(from: content)
         tags.formUnion(keywords)
 
@@ -184,53 +211,24 @@ class AIProcessor: ObservableObject {
     }
     
     func categorizeContent(_ text: String) async -> Category? {
-        guard !text.isEmpty else { return nil }
-        
-        let lowercased = text.lowercased()
-        
-        if lowercased.contains("meeting") || lowercased.contains("call") || lowercased.contains("discussion") {
-            return Category(name: "Meetings", color: "#FF9500")
-        } else if lowercased.contains("idea") || lowercased.contains("brainstorm") || lowercased.contains("concept") {
-            return Category(name: "Ideas", color: "#AF52DE")
-        } else if lowercased.contains("task") || lowercased.contains("todo") || lowercased.contains("action") {
-            return Category(name: "Tasks", color: "#FF3B30")
-        } else if lowercased.contains("research") || lowercased.contains("study") || lowercased.contains("learn") {
-            return Category(name: "Research", color: "#007AFF")
-        } else if lowercased.contains("personal") || lowercased.contains("diary") || lowercased.contains("journal") {
-            return Category(name: "Personal", color: "#34C759")
-        }
-        
-        return Category(name: "General", color: "#8E8E93")
+        let result = await coreMLProcessor.classifyCategory(text)
+        return createCategory(from: result.category)
+    }
+
+    func categorizeContentWithConfidence(_ text: String) async -> (category: Category?, confidence: Double) {
+        let result = await coreMLProcessor.classifyCategory(text)
+        let category = createCategory(from: result.category)
+        return (category, result.confidence)
     }
     
     func analyzeSentiment(_ text: String) async -> String {
-        guard !text.isEmpty else { return "neutral" }
+        let result = await coreMLProcessor.analyzeSentimentWithML(text)
+        return result.sentiment
+    }
 
-        tagger.string = text
-        var sentimentScore: Double = 0
-        var sentimentCount = 0
-
-        let range = text.startIndex..<text.endIndex
-        tagger.enumerateTags(in: range,
-                           unit: .sentence,
-                           scheme: .sentimentScore) { tag, _ in
-            if let tag = tag, let score = Double(tag.rawValue) {
-                sentimentScore += score
-                sentimentCount += 1
-            }
-            return true
-        }
-
-        if sentimentCount > 0 {
-            let averageScore = sentimentScore / Double(sentimentCount)
-            if averageScore > 0.1 {
-                return "positive"
-            } else if averageScore < -0.1 {
-                return "negative"
-            }
-        }
-
-        return "neutral"
+    func analyzeSentimentWithConfidence(_ text: String) async -> (sentiment: String, confidence: Double) {
+        let result = await coreMLProcessor.analyzeSentimentWithML(text)
+        return (result.sentiment, result.confidence)
     }
     
     // MARK: - Note Relationship Methods
@@ -396,12 +394,426 @@ private extension AIProcessor {
     }
     
     func calculateSimilarity(between text1: String, and text2: String) -> Double {
+        // Try semantic similarity first (more accurate)
+        let semanticSimilarity = coreMLProcessor.calculateSemanticSimilarity(text1, text2)
+
+        if semanticSimilarity > 0 {
+            return semanticSimilarity
+        }
+
+        // Fallback to word-based similarity
         let words1 = Set(text1.lowercased().components(separatedBy: .whitespacesAndNewlines))
         let words2 = Set(text2.lowercased().components(separatedBy: .whitespacesAndNewlines))
-        
+
         let intersection = words1.intersection(words2)
         let union = words1.union(words2)
-        
+
         return union.isEmpty ? 0 : Double(intersection.count) / Double(union.count)
+    }
+
+    func removeDuplicateContent(summary: String, keyPoints: [String]) -> [String] {
+        guard !summary.isEmpty && !keyPoints.isEmpty else { return keyPoints }
+        
+        let summaryWords = Set(summary.lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { $0.count > 3 })
+        
+        return keyPoints.filter { keyPoint in
+            let keyPointWords = Set(keyPoint.lowercased()
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { $0.count > 3 })
+                
+            let intersection = summaryWords.intersection(keyPointWords)
+            let similarity = Double(intersection.count) / Double(max(summaryWords.count, keyPointWords.count))
+            
+            // If similarity is over 80%, consider it a duplicate
+            return similarity < 0.8
+        }
+    }
+    
+    func createCategory(from categoryName: String) -> Category {
+        switch categoryName.lowercased() {
+        case "meeting", "meetings":
+            return Category(name: "Meetings", color: "#FF9500")
+        case "research":
+            return Category(name: "Research", color: "#007AFF")
+        case "personal":
+            return Category(name: "Personal", color: "#34C759")
+        case "tasks", "task":
+            return Category(name: "Tasks", color: "#FF3B30")
+        case "ideas", "idea":
+            return Category(name: "Ideas", color: "#AF52DE")
+        default:
+            return Category(name: "General", color: "#8E8E93")
+        }
+    }
+}
+
+// MARK: - Core ML Text Processor
+class CoreMLTextProcessor {
+
+    // MARK: - Private Properties
+    private var sentimentModel: NLModel?
+    private var categoryModel: NLModel?
+    private let embedding = NLEmbedding.sentenceEmbedding(for: .english)
+
+    // MARK: - Initialization
+    init() {
+        setupModels()
+    }
+
+    private func setupModels() {
+        // Initialize Apple's built-in sentiment model
+        setupSentimentModel()
+
+        // Initialize custom category model (will fallback to rule-based if not available)
+        setupCategoryModel()
+    }
+
+    private func setupSentimentModel() {
+        // Try to use Apple's built-in sentiment model
+        if let mlModel = createSentimentModel(),
+           let model = try? NLModel(mlModel: mlModel) {
+            self.sentimentModel = model
+        }
+    }
+
+    private func setupCategoryModel() {
+        // Try to load custom category model, fallback to rule-based
+        if let modelURL = Bundle.main.url(forResource: "NoteCategoryClassifier", withExtension: "mlmodelc"),
+           let mlModel = try? MLModel(contentsOf: modelURL),
+           let nlModel = try? NLModel(mlModel: mlModel) {
+            self.categoryModel = nlModel
+        }
+    }
+
+    // MARK: - Public Methods
+    func analyzeSentimentWithML(_ text: String) async -> MLSentimentResult {
+        guard !text.isEmpty else {
+            return MLSentimentResult(sentiment: "neutral", confidence: 0.0, rawScore: 0.0)
+        }
+
+        if let model = sentimentModel {
+            return await performMLSentimentAnalysis(text, model: model)
+        } else {
+            return await fallbackSentimentAnalysis(text)
+        }
+    }
+
+    func classifyCategory(_ text: String) async -> MLCategoryResult {
+        guard !text.isEmpty else {
+            return MLCategoryResult(category: "general", confidence: 0.0, alternatives: [])
+        }
+
+        if let model = categoryModel {
+            return await performMLCategoryClassification(text, model: model)
+        } else {
+            return await fallbackCategoryClassification(text)
+        }
+    }
+
+    func generateSemanticEmbedding(_ text: String) -> [Double]? {
+        return embedding?.vector(for: text)
+    }
+
+    func calculateSemanticSimilarity(_ text1: String, _ text2: String) -> Double {
+        guard let embedding1 = generateSemanticEmbedding(text1),
+              let embedding2 = generateSemanticEmbedding(text2) else {
+            return 0.0
+        }
+
+        return cosineSimilarity(embedding1, embedding2)
+    }
+
+    // MARK: - Private ML Methods
+    private func performMLSentimentAnalysis(_ text: String, model: NLModel) async -> MLSentimentResult {
+        let prediction = model.predictedLabel(for: text)
+        let hypotheses = model.predictedLabelHypotheses(for: text, maximumCount: 3)
+
+        let confidence = hypotheses.values.max() ?? 0.0
+        let sentiment = prediction ?? "neutral"
+
+        // Calculate raw score for more nuanced analysis
+        let rawScore = calculateRawSentimentScore(from: hypotheses)
+
+        return MLSentimentResult(
+            sentiment: sentiment,
+            confidence: confidence,
+            rawScore: rawScore
+        )
+    }
+
+    private func performMLCategoryClassification(_ text: String, model: NLModel) async -> MLCategoryResult {
+        let prediction = model.predictedLabel(for: text)
+        let hypotheses = model.predictedLabelHypotheses(for: text, maximumCount: 5)
+
+        let confidence = hypotheses.values.max() ?? 0.0
+        let category = prediction ?? "general"
+
+        // Get alternative categories
+        let sortedHypotheses = hypotheses.sorted { $0.value > $1.value }
+        let alternatives = Array(sortedHypotheses.dropFirst().prefix(3)).map { ($0.key, $0.value) }
+
+        return MLCategoryResult(
+            category: category,
+            confidence: confidence,
+            alternatives: alternatives
+        )
+    }
+
+    private func fallbackSentimentAnalysis(_ text: String) async -> MLSentimentResult {
+        // Enhanced fallback using NLTagger with better scoring
+        let tagger = NLTagger(tagSchemes: [.sentimentScore])
+        tagger.string = text
+
+        var sentimentScore: Double = 0
+        var sentimentCount = 0
+
+        let range = text.startIndex..<text.endIndex
+        tagger.enumerateTags(in: range, unit: .sentence, scheme: .sentimentScore) { tag, _ in
+            if let tag = tag, let score = Double(tag.rawValue) {
+                sentimentScore += score
+                sentimentCount += 1
+            }
+            return true
+        }
+
+        let averageScore = sentimentCount > 0 ? sentimentScore / Double(sentimentCount) : 0.0
+        let confidence = min(abs(averageScore) * 2, 1.0) // Convert to confidence
+
+        let sentiment: String
+        if averageScore > 0.1 {
+            sentiment = "positive"
+        } else if averageScore < -0.1 {
+            sentiment = "negative"
+        } else {
+            sentiment = "neutral"
+        }
+
+        return MLSentimentResult(
+            sentiment: sentiment,
+            confidence: confidence,
+            rawScore: averageScore
+        )
+    }
+
+    private func fallbackCategoryClassification(_ text: String) async -> MLCategoryResult {
+        // Enhanced rule-based classification with confidence scoring
+        let lowercased = text.lowercased()
+        var categoryScores: [String: Double] = [:]
+
+        // Meeting indicators
+        let meetingKeywords = ["meeting", "call", "discussion", "agenda", "attendees", "minutes", "zoom", "teams"]
+        categoryScores["meeting"] = calculateKeywordScore(lowercased, keywords: meetingKeywords)
+
+        // Research indicators
+        let researchKeywords = ["research", "study", "analysis", "findings", "data", "hypothesis", "methodology"]
+        categoryScores["research"] = calculateKeywordScore(lowercased, keywords: researchKeywords)
+
+        // Personal indicators
+        let personalKeywords = ["feeling", "think", "believe", "personal", "diary", "journal", "mood"]
+        categoryScores["personal"] = calculateKeywordScore(lowercased, keywords: personalKeywords)
+
+        // Task indicators
+        let taskKeywords = ["task", "todo", "action", "complete", "finish", "deadline", "priority"]
+        categoryScores["tasks"] = calculateKeywordScore(lowercased, keywords: taskKeywords)
+
+        // Ideas indicators
+        let ideaKeywords = ["idea", "brainstorm", "concept", "innovation", "creative", "inspiration"]
+        categoryScores["ideas"] = calculateKeywordScore(lowercased, keywords: ideaKeywords)
+
+        // Find best match
+        let sortedScores = categoryScores.sorted { $0.value > $1.value }
+        let bestCategory = sortedScores.first?.key ?? "general"
+        let confidence = sortedScores.first?.value ?? 0.0
+
+        // Create alternatives list
+        let alternatives = Array(sortedScores.dropFirst().prefix(3)).map { ($0.key, $0.value) }
+
+        return MLCategoryResult(
+            category: bestCategory,
+            confidence: confidence,
+            alternatives: alternatives
+        )
+    }
+
+    // MARK: - Helper Methods
+    private func calculateRawSentimentScore(from hypotheses: [String: Double]) -> Double {
+        var score: Double = 0.0
+
+        for (key, value) in hypotheses {
+            switch key.lowercased() {
+            case "positive":
+                score += value
+            case "negative":
+                score -= value
+            default:
+                break
+            }
+        }
+
+        return score
+    }
+
+    private func calculateKeywordScore(_ text: String, keywords: [String]) -> Double {
+        var score: Double = 0.0
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+        let totalWords = Double(words.count)
+
+        for keyword in keywords {
+            if text.contains(keyword) {
+                // Base score for containing the keyword
+                score += 0.3
+
+                // Bonus for multiple occurrences
+                let occurrences = text.components(separatedBy: keyword).count - 1
+                score += Double(occurrences) * 0.1
+
+                // Bonus for keyword density
+                score += Double(occurrences) / totalWords
+            }
+        }
+
+        return min(score, 1.0) // Cap at 1.0
+    }
+
+    private func cosineSimilarity(_ a: [Double], _ b: [Double]) -> Double {
+        guard a.count == b.count else { return 0.0 }
+
+        let dotProduct = zip(a, b).map(*).reduce(0, +)
+        let magnitudeA = sqrt(a.map { $0 * $0 }.reduce(0, +))
+        let magnitudeB = sqrt(b.map { $0 * $0 }.reduce(0, +))
+
+        guard magnitudeA > 0 && magnitudeB > 0 else { return 0.0 }
+        return dotProduct / (magnitudeA * magnitudeB)
+    }
+
+    private func createSentimentModel() -> MLModel? {
+        // This would normally load a pre-trained sentiment model
+        // For now, we return nil to use the fallback method
+        // In a real implementation, you'd load an actual Core ML model here
+        return nil
+    }
+}
+
+// MARK: - ML Entity Extractor
+class MLEntityExtractor {
+    private let tagger = NLTagger(tagSchemes: [.nameType, .lexicalClass, .lemma])
+
+    func extractEntitiesWithML(_ text: String) async -> ExtractedEntities {
+        guard !text.isEmpty else {
+            return ExtractedEntities(people: [], places: [], organizations: [], actionVerbs: [], importantNouns: [])
+        }
+
+        tagger.string = text
+
+        var people: [String] = []
+        var places: [String] = []
+        var organizations: [String] = []
+        var actionVerbs: [String] = []
+        var importantNouns: [String] = []
+
+        let range = text.startIndex..<text.endIndex
+
+        // Extract named entities
+        tagger.enumerateTags(in: range, unit: .word, scheme: .nameType) { tag, tokenRange in
+            let entity = String(text[tokenRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !entity.isEmpty else { return true }
+
+            switch tag {
+            case .personalName:
+                if !people.contains(entity) {
+                    people.append(entity)
+                }
+            case .placeName:
+                if !places.contains(entity) {
+                    places.append(entity)
+                }
+            case .organizationName:
+                if !organizations.contains(entity) {
+                    organizations.append(entity)
+                }
+            default:
+                break
+            }
+            return true
+        }
+
+        // Extract action verbs and important nouns
+        tagger.enumerateTags(in: range, unit: .word, scheme: .lexicalClass) { tag, tokenRange in
+            let word = String(text[tokenRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !word.isEmpty, word.count > 2 else { return true }
+
+            switch tag {
+            case .verb:
+                if isActionVerb(word) && !actionVerbs.contains(word.lowercased()) {
+                    actionVerbs.append(word.lowercased())
+                }
+            case .noun:
+                if isImportantNoun(word, in: text) && !importantNouns.contains(word.lowercased()) {
+                    importantNouns.append(word.lowercased())
+                }
+            default:
+                break
+            }
+            return true
+        }
+
+        return ExtractedEntities(
+            people: people,
+            places: places,
+            organizations: organizations,
+            actionVerbs: Array(actionVerbs.prefix(10)), // Limit to most relevant
+            importantNouns: Array(importantNouns.prefix(15)) // Limit to most relevant
+        )
+    }
+
+    private func isActionVerb(_ verb: String) -> Bool {
+        let actionVerbs = [
+            "call", "email", "text", "contact", "schedule", "book", "buy", "purchase",
+            "complete", "finish", "start", "begin", "create", "make", "build", "develop",
+            "update", "modify", "change", "review", "check", "verify", "confirm",
+            "send", "deliver", "submit", "upload", "download", "install", "setup",
+            "meet", "discuss", "talk", "present", "demonstrate", "explain", "teach",
+            "research", "study", "analyze", "investigate", "explore", "learn",
+            "plan", "organize", "prepare", "arrange", "coordinate", "manage"
+        ]
+        return actionVerbs.contains(verb.lowercased())
+    }
+
+    private func isImportantNoun(_ noun: String, in text: String) -> Bool {
+        let word = noun.lowercased()
+
+        // Skip common words
+        let commonWords = ["thing", "time", "way", "day", "man", "world", "life", "hand", "part", "child", "eye", "woman", "place", "work", "week", "case", "point", "government", "company"]
+        if commonWords.contains(word) {
+            return false
+        }
+
+        // Check if it appears multiple times (indicates importance)
+        let occurrences = text.lowercased().components(separatedBy: word).count - 1
+        if occurrences > 1 {
+            return true
+        }
+
+        // Check if it's capitalized (might be important)
+        if noun.first?.isUppercase == true {
+            return true
+        }
+
+        // Check if it's a domain-specific important noun
+        let importantNouns = [
+            "project", "task", "goal", "objective", "deadline", "meeting", "presentation",
+            "document", "report", "analysis", "research", "study", "data", "information",
+            "client", "customer", "user", "team", "member", "manager", "director",
+            "budget", "cost", "price", "revenue", "profit", "investment", "funding",
+            "strategy", "plan", "approach", "method", "process", "system", "solution",
+            "issue", "problem", "challenge", "opportunity", "risk", "threat",
+            "decision", "choice", "option", "alternative", "recommendation", "suggestion"
+        ]
+
+        return importantNouns.contains(word)
     }
 }

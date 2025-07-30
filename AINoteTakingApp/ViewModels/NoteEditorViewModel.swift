@@ -10,6 +10,24 @@ import UIKit
 import CoreData
 import Combine
 
+// MARK: - Image Import Errors
+enum ImageImportError: LocalizedError {
+    case invalidImageData
+    case saveFailed
+    case directoryCreationFailed
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidImageData:
+            return "Unable to process image data"
+        case .saveFailed:
+            return "Failed to save image to disk"
+        case .directoryCreationFailed:
+            return "Failed to create attachments directory"
+        }
+    }
+}
+
 @MainActor
 class NoteEditorViewModel: ObservableObject {
     
@@ -103,13 +121,11 @@ class NoteEditorViewModel: ObservableObject {
         let noteToSave = createNoteFromCurrentData()
         
         if originalNote != nil {
+            // Update existing note - this properly saves attachments via updateEntity
             dataManager.updateNote(noteToSave)
         } else {
-            let _ = dataManager.createNote(
-                title: noteToSave.title,
-                content: noteToSave.content,
-                folderId: noteToSave.folderId
-            )
+            // Create new note - use createNoteFromData to save all properties including attachments
+            let _ = dataManager.createNoteFromData(noteToSave)
         }
         
         await MainActor.run {
@@ -125,11 +141,7 @@ class NoteEditorViewModel: ObservableObject {
         if originalNote != nil {
             dataManager.updateNote(noteToSave)
         } else {
-            let _ = dataManager.createNote(
-                title: noteToSave.title,
-                content: noteToSave.content,
-                folderId: noteToSave.folderId
-            )
+            let _ = dataManager.createNoteFromData(noteToSave)
         }
     }
     
@@ -242,47 +254,73 @@ class NoteEditorViewModel: ObservableObject {
         isProcessing = true
         
         do {
-            // Save image to documents directory
+            // Ensure image data is available
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                throw ImageImportError.invalidImageData
+            }
+            
+            // Create attachments directory if it doesn't exist
             let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let attachmentsDir = documentsDir.appendingPathComponent("Attachments")
-            let imageURL = attachmentsDir.appendingPathComponent("\(UUID().uuidString).jpg")
             
-            if let imageData = image.jpegData(compressionQuality: 0.8) {
-                try imageData.write(to: imageURL)
-                
-                // Create attachment
-                let attachment = Attachment(
-                    fileName: imageURL.lastPathComponent,
-                    fileExtension: "jpg",
-                    mimeType: "image/jpeg",
-                    fileSize: Int64(imageData.count),
-                    localURL: imageURL,
-                    thumbnailData: image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.8),
-                    type: .image
-                )
-                
-                // Perform OCR
-                let extractedText = try await fileImportManager.performOCR(on: imageURL)
-                
-                await MainActor.run {
-                    self.attachments.append(attachment)
-                    
-                    // Add extracted text to content if available
-                    if !extractedText.isEmpty {
-                        if !self.content.isEmpty {
-                            self.content += "\n\n"
-                        }
-                        self.content += "--- Text from image ---\n"
-                        self.content += extractedText
-                    }
-                    
-                    self.isProcessing = false
-                }
+            if !FileManager.default.fileExists(atPath: attachmentsDir.path) {
+                try FileManager.default.createDirectory(at: attachmentsDir, withIntermediateDirectories: true)
             }
+            
+            // Generate unique filename and save image
+            let fileName = "\(UUID().uuidString).jpg"
+            let imageURL = attachmentsDir.appendingPathComponent(fileName)
+            try imageData.write(to: imageURL)
+            
+            // Verify file was saved successfully
+            guard FileManager.default.fileExists(atPath: imageURL.path) else {
+                throw ImageImportError.saveFailed
+            }
+            
+            // Create thumbnail
+            let thumbnailData = image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.7)
+            
+            // Create attachment
+            let attachment = Attachment(
+                fileName: fileName,
+                fileExtension: "jpg",
+                mimeType: "image/jpeg",
+                fileSize: Int64(imageData.count),
+                localURL: imageURL,
+                thumbnailData: thumbnailData,
+                type: .image
+            )
+            
+            // Perform OCR (optional, don't fail if OCR fails)
+            var extractedText = ""
+            do {
+                extractedText = try await fileImportManager.performOCR(on: imageURL)
+            } catch {
+                print("OCR failed, continuing without text extraction: \(error)")
+            }
+            
+            await MainActor.run {
+                self.attachments.append(attachment)
+                
+                // Add extracted text to content if available
+                if !extractedText.isEmpty {
+                    if !self.content.isEmpty {
+                        self.content += "\n\n"
+                    }
+                    self.content += "--- Text from image ---\n"
+                    self.content += extractedText
+                }
+                
+                self.isProcessing = false
+                print("✅ Image saved successfully at: \(imageURL.path)")
+                print("✅ Attachments count: \(self.attachments.count)")
+            }
+            
         } catch {
             await MainActor.run {
                 self.errorMessage = "Image import failed: \(error.localizedDescription)"
                 self.isProcessing = false
+                print("❌ Image import failed: \(error)")
             }
         }
     }

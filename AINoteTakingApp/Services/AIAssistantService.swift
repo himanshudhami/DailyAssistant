@@ -422,18 +422,37 @@ private extension AIAssistantService {
             return ("I couldn't find any notes matching those terms to summarize.", [.summarizeAll], [])
         }
 
-        let noteToSummarize = relevantNotes.first!
-        let summary = await aiProcessor.summarizeContent(noteToSummarize.content)
-        let keyPoints = await aiProcessor.extractKeyPoints(noteToSummarize.content)
+        // If multiple notes found, summarize all of them, not just the first
+        if relevantNotes.count > 1 {
+            let allContent = relevantNotes.map { note in
+                "\(note.title.isEmpty ? "Untitled" : note.title): \(note.content)"
+            }.joined(separator: "\n\n")
+            
+            let summary = await aiProcessor.summarizeContent(allContent)
+            let keyPoints = await aiProcessor.extractKeyPoints(allContent)
+            
+            var response = "Here's a summary of \(relevantNotes.count) matching notes:\n\n**Summary:**\n\(summary)"
+            
+            if !keyPoints.isEmpty {
+                response += "\n\n**Key Points:**\n" + keyPoints.map { "• \($0)" }.joined(separator: "\n")
+            }
+            
+            let actions: [AIAction] = [.extractTasks, .categorizeNotes]
+            return (response, actions, relevantNotes)
+        } else {
+            let noteToSummarize = relevantNotes.first!
+            let summary = await aiProcessor.summarizeContent(noteToSummarize.content)
+            let keyPoints = await aiProcessor.extractKeyPoints(noteToSummarize.content)
 
-        var response = "Here's a summary of '\(noteToSummarize.title.isEmpty ? "Untitled Note" : noteToSummarize.title)':\n\n**Summary:**\n\(summary)"
+            var response = "Here's a summary of '\(noteToSummarize.title.isEmpty ? "Untitled Note" : noteToSummarize.title)':\n\n**Summary:**\n\(summary)"
 
-        if !keyPoints.isEmpty {
-            response += "\n\n**Key Points:**\n" + keyPoints.map { "• \($0)" }.joined(separator: "\n")
+            if !keyPoints.isEmpty {
+                response += "\n\n**Key Points:**\n" + keyPoints.map { "• \($0)" }.joined(separator: "\n")
+            }
+
+            let actions: [AIAction] = [.findRelated(noteToSummarize), .extractTasks]
+            return (response, actions, [noteToSummarize])
         }
-
-        let actions: [AIAction] = [.findRelated(noteToSummarize), .extractTasks]
-        return (response, actions, [noteToSummarize])
     }
 
     func handleOrganizeRequest(_ notes: [Note]) async -> (String, [AIAction], [Note]) {
@@ -539,7 +558,21 @@ private extension AIAssistantService {
         if searchTerms.isEmpty { return notes }
         
         let query = searchTerms.joined(separator: " ")
-        return dataManager.searchAllNotes(query: query)
+        let foundNotes = dataManager.searchAllNotes(query: query)
+        
+        // If no results from data manager, try local search as fallback
+        if foundNotes.isEmpty {
+            return notes.filter { note in
+                let searchText = query.lowercased()
+                return note.title.lowercased().contains(searchText) ||
+                       note.content.lowercased().contains(searchText) ||
+                       note.tags.contains { $0.lowercased().contains(searchText) } ||
+                       note.transcript?.lowercased().contains(searchText) == true ||
+                       note.aiSummary?.lowercased().contains(searchText) == true
+            }
+        }
+        
+        return foundNotes
     }
     
     func getAvailableTags(from notes: [Note]) -> [String] {

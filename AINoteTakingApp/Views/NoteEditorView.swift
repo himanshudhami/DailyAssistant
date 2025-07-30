@@ -95,7 +95,7 @@ struct NoteEditorView: View {
             Task { await viewModel.handleFileImport(result) }
         }
         .sheet(isPresented: $showingImagePicker) {
-            ImagePicker { image in
+            SharedImagePicker { image in
                 Task { await viewModel.handleImageImport(image) }
             }
         }
@@ -185,8 +185,9 @@ struct AIContentSection: View {
                     )
                 }
                 
-                // Key Points
-                if !viewModel.keyPoints.isEmpty {
+                // Key Points - only show if different from summary and not empty
+                if !viewModel.keyPoints.isEmpty && 
+                   !(viewModel.keyPoints.count == 1 && viewModel.keyPoints.first == viewModel.aiSummary) {
                     BulletPointCard(
                         title: "Key Points",
                         items: viewModel.keyPoints,
@@ -493,47 +494,7 @@ struct AudioPlayerCard: View {
     }
 }
 
-struct AttachmentsCard: View {
-    @Environment(\.appTheme) private var theme
-    let attachments: [Attachment]
-    let onDelete: (Attachment) -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "paperclip")
-                    .foregroundColor(theme.accent)
-                    .font(.subheadline)
-                
-                Text("Attachments (\(attachments.count))")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(theme.accent)
-            }
-            
-            VStack(spacing: 4) {
-                ForEach(attachments, id: \.id) { attachment in
-                    HStack {
-                        Image(systemName: attachment.type.icon)
-                        Text(attachment.fileName)
-                            .font(.caption)
-                        
-                        Spacer()
-                        
-                        Button("Remove") {
-                            onDelete(attachment)
-                        }
-                        .font(.caption)
-                        .foregroundColor(theme.error)
-                    }
-                }
-            }
-        }
-        .padding(12)
-        .background(theme.accent.opacity(0.1))
-        .cornerRadius(10)
-    }
-}
+// AttachmentsCard and related components moved to AttachmentComponents.swift for better organization
 
 struct TagsCard: View {
     @Environment(\.appTheme) private var theme
@@ -709,9 +670,13 @@ struct EditorToolbar: View {
             Button(action: {
                 if audioManager.isRecording {
                     audioManager.stopRecording()
-                    let url = audioManager.getRecordingURL()
-                    let transcript = audioManager.currentTranscript
-                    onVoiceRecordingComplete(url, transcript)
+                    // Give a small delay to ensure recording is properly finalized
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        let url = audioManager.getRecordingURL()
+                        let transcript = audioManager.currentTranscript.isEmpty ? nil : audioManager.currentTranscript
+                        onVoiceRecordingComplete(url, transcript)
+                        audioManager.clearRecorder() // Clear the recorder after handling
+                    }
                 } else {
                     audioManager.startRecording()
                 }
@@ -800,19 +765,7 @@ struct FlowResult {
 }
 
 
-// MARK: - Extensions
-extension AttachmentType {
-    var icon: String {
-        switch self {
-        case .image: return "photo"
-        case .pdf: return "doc.fill"
-        case .document: return "doc.text"
-        case .audio: return "waveform"
-        case .video: return "video"
-        case .other: return "doc"
-        }
-    }
-}
+// MARK: - Extensions moved to AttachmentComponents.swift
 
 #Preview {
     NoteEditorView()
