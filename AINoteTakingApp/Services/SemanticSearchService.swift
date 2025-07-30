@@ -204,6 +204,18 @@ private extension SemanticSearchService {
                     matchedField: .aiSummary
                 ))
             }
+            
+            // OCR Text exact match
+            if let ocrText = note.ocrText, ocrText.lowercased().contains(lowercasedQuery) {
+                let matchedSnippet = extractSnippet(from: ocrText, query: query)
+                results.append(SearchResult(
+                    note: note,
+                    relevanceScore: 0.85,
+                    searchType: .exactMatch,
+                    matchedContent: matchedSnippet,
+                    matchedField: .imageOCR
+                ))
+            }
         }
         
         return results
@@ -409,6 +421,10 @@ private extension SemanticSearchService {
         
         if let aiSummary = note.aiSummary {
             content.append(aiSummary)
+        }
+        
+        if let ocrText = note.ocrText {
+            content.append(ocrText)
         }
         
         if !note.keyPoints.isEmpty {

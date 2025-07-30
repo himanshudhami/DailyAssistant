@@ -42,6 +42,7 @@ class NoteEditorViewModel: ObservableObject {
     @Published var transcript: String?
     @Published var aiSummary: String?
     @Published var keyPoints: [String] = []
+    @Published var ocrText: String?
     
     @Published var isProcessing = false
     @Published var isSaving = false
@@ -68,7 +69,8 @@ class NoteEditorViewModel: ObservableObject {
                selectedCategory?.id != originalNote.category?.id ||
                attachments.count != originalNote.attachments.count ||
                audioURL != originalNote.audioURL ||
-               transcript != originalNote.transcript
+               transcript != originalNote.transcript ||
+               ocrText != originalNote.ocrText
     }
     
     // MARK: - Private Properties
@@ -102,6 +104,7 @@ class NoteEditorViewModel: ObservableObject {
         transcript = note.transcript
         aiSummary = note.aiSummary
         keyPoints = note.keyPoints
+        ocrText = note.ocrText
     }
     
     private func setupAutoSave() {
@@ -163,7 +166,8 @@ class NoteEditorViewModel: ObservableObject {
             aiSummary: aiSummary,
             keyPoints: keyPoints,
             actionItems: actionItems,
-            transcript: transcript
+            transcript: transcript,
+            ocrText: ocrText
         )
     }
     
@@ -227,8 +231,16 @@ class NoteEditorViewModel: ObservableObject {
                     if importResult.success, let attachment = importResult.attachment {
                         self.attachments.append(attachment)
                         
-                        // Add extracted text to content if available
+                        // Add extracted text to OCR field and content if available
                         if let extractedText = importResult.extractedText, !extractedText.isEmpty {
+                            // Store in dedicated OCR field for searching
+                            if let existingOcrText = self.ocrText, !existingOcrText.isEmpty {
+                                self.ocrText = existingOcrText + "\n\n--- From \(attachment.fileName) ---\n" + extractedText
+                            } else {
+                                self.ocrText = "--- From \(attachment.fileName) ---\n" + extractedText
+                            }
+                            
+                            // Also add to content for display
                             if !self.content.isEmpty {
                                 self.content += "\n\n"
                             }
@@ -302,8 +314,16 @@ class NoteEditorViewModel: ObservableObject {
             await MainActor.run {
                 self.attachments.append(attachment)
                 
-                // Add extracted text to content if available
+                // Add extracted text to OCR field and content if available
                 if !extractedText.isEmpty {
+                    // Store in dedicated OCR field for searching
+                    if let existingOcrText = self.ocrText, !existingOcrText.isEmpty {
+                        self.ocrText = existingOcrText + "\n\n--- Text from image ---\n" + extractedText
+                    } else {
+                        self.ocrText = "--- Text from image ---\n" + extractedText
+                    }
+                    
+                    // Also add to content for display
                     if !self.content.isEmpty {
                         self.content += "\n\n"
                     }
@@ -407,6 +427,7 @@ class NoteEditorViewModel: ObservableObject {
             transcript = nil
             aiSummary = nil
             keyPoints = []
+            ocrText = nil
         }
     }
 }

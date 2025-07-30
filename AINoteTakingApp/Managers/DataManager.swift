@@ -15,6 +15,23 @@ import CoreData
 class DataManager: ObservableObject {
     static let shared = DataManager()
     
+    // Semantic search service for indexing
+    private var semanticSearchService: SemanticSearchService?
+    
+    // Initialize semantic search service on main actor
+    private func getSemanticSearchService() async -> SemanticSearchService {
+        if let service = semanticSearchService {
+            return service
+        }
+        
+        let service = await MainActor.run {
+            SemanticSearchService()
+        }
+        
+        semanticSearchService = service
+        return service
+    }
+    
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "DataModel")
         container.loadPersistentStores { _, error in
@@ -219,6 +236,12 @@ extension DataManager {
             updateFolderNoteCount(folderId)
         }
         
+        // Index note for search
+        Task {
+            let searchService = await getSemanticSearchService()
+            await searchService.updateNoteEmbedding(for: note)
+        }
+        
         return note
     }
     
@@ -255,6 +278,12 @@ extension DataManager {
             updateFolderNoteCount(folderId)
         }
         
+        // Index note for search
+        Task {
+            let searchService = await getSemanticSearchService()
+            await searchService.updateNoteEmbedding(for: note)
+        }
+        
         return note
     }
     
@@ -265,6 +294,12 @@ extension DataManager {
         
         if let folderId = note.folderId {
             updateFolderNoteCount(folderId)
+        }
+        
+        // Index note for search
+        Task {
+            let searchService = await getSemanticSearchService()
+            await searchService.updateNoteEmbedding(for: note)
         }
         
         return note
@@ -322,6 +357,12 @@ extension DataManager {
                 }
                 if let newFolderId = note.folderId {
                     updateFolderNoteCount(newFolderId)
+                }
+                
+                // Re-index note for search
+                Task {
+                    let searchService = await self.getSemanticSearchService()
+                    await searchService.updateNoteEmbedding(for: note)
                 }
             }
         } catch {

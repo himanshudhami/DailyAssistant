@@ -114,6 +114,7 @@ struct Note: Codable, Identifiable, Hashable {
     var keyPoints: [String]
     var actionItems: [ActionItem]
     var transcript: String?
+    var ocrText: String?
     
     init(
         id: UUID = UUID(),
@@ -129,7 +130,8 @@ struct Note: Codable, Identifiable, Hashable {
         aiSummary: String? = nil,
         keyPoints: [String] = [],
         actionItems: [ActionItem] = [],
-        transcript: String? = nil
+        transcript: String? = nil,
+        ocrText: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -145,6 +147,7 @@ struct Note: Codable, Identifiable, Hashable {
         self.keyPoints = keyPoints
         self.actionItems = actionItems
         self.transcript = transcript
+        self.ocrText = ocrText
     }
 }
 
@@ -344,6 +347,7 @@ extension Note {
             return ActionItem(from: actionItemEntity)
         } ?? []
         self.transcript = entity.transcript
+        self.ocrText = entity.ocrText
     }
     
     func updateEntity(_ entity: NoteEntity, context: NSManagedObjectContext) {
@@ -357,6 +361,7 @@ extension Note {
         entity.aiSummary = self.aiSummary
         entity.keyPoints = self.keyPoints.joined(separator: "\n")
         entity.transcript = self.transcript
+        entity.ocrText = self.ocrText
         
         // Update folder relationship
         if let folderId = self.folderId {

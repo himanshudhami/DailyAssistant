@@ -244,22 +244,30 @@ struct NotesListView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            NotesContentView(
-                notes: viewModel.filteredNotes,
-                folders: currentFolders,
-                viewMode: viewMode,
-                selectedNote: $selectedNote,
-                showingNoteEditor: $showingNoteEditor,
-                onDeleteNote: confirmDelete,
-                onFolderRename: { folder in
-                    folderToRename = folder
-                    newFolderName = folder.name
-                },
-                onFolderDelete: { folder in
-                    folderToDelete = folder
-                }
-            )
-            .environmentObject(viewModel)
+            if viewModel.filteredNotes.isEmpty && currentFolders.isEmpty {
+                EmptyStateView(
+                    showingNoteEditor: $showingNoteEditor,
+                    showingVoiceRecorder: $showingVoiceRecorder
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                NotesContentView(
+                    notes: viewModel.filteredNotes,
+                    folders: currentFolders,
+                    viewMode: viewMode,
+                    selectedNote: $selectedNote,
+                    showingNoteEditor: $showingNoteEditor,
+                    onDeleteNote: confirmDelete,
+                    onFolderRename: { folder in
+                        folderToRename = folder
+                        newFolderName = folder.name
+                    },
+                    onFolderDelete: { folder in
+                        folderToDelete = folder
+                    }
+                )
+                .environmentObject(viewModel)
+            }
         }
     }
     
@@ -269,7 +277,7 @@ struct NotesListView: View {
             Button(action: { showingVoiceRecorder = true }) {
                 Image(systemName: "mic.circle.fill")
                     .foregroundColor(theme.error)
-                    .font(.title2)
+                    .font(.title)
             }
             
             Menu {
@@ -290,7 +298,7 @@ struct NotesListView: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .foregroundColor(theme.primary)
-                    .font(.title2)
+                    .font(.title)
             } primaryAction: {
                 showingNoteEditor = true
             }
@@ -918,6 +926,91 @@ struct FoldersSection: View {
             }
             .padding(.bottom)
         }
+    }
+}
+
+// MARK: - Empty State View
+struct EmptyStateView: View {
+    @Environment(\.appTheme) private var theme
+    @Binding var showingNoteEditor: Bool
+    @Binding var showingVoiceRecorder: Bool
+    
+    var body: some View {
+        VStack(spacing: 40) {
+            Spacer()
+            
+            // Welcome message
+            VStack(spacing: 16) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 60))
+                    .foregroundColor(theme.textSecondary)
+                
+                Text("Welcome to MyLogs")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(theme.textPrimary)
+                
+                Text("Start capturing your thoughts and ideas")
+                    .font(.body)
+                    .foregroundColor(theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            // Large action buttons
+            HStack(spacing: 30) {
+                // Voice Recording Button
+                Button(action: {
+                    showingVoiceRecorder = true
+                }) {
+                    VStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(theme.error.opacity(0.2))
+                                .frame(width: 100, height: 100)
+                            
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(theme.error)
+                        }
+                        
+                        Text("Voice Note")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(theme.textPrimary)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                // Text Note Button
+                Button(action: {
+                    showingNoteEditor = true
+                }) {
+                    VStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(theme.primary.opacity(0.2))
+                                .frame(width: 100, height: 100)
+                            
+                            Image(systemName: "plus")
+                                .font(.system(size: 40))
+                                .fontWeight(.medium)
+                                .foregroundColor(theme.primary)
+                        }
+                        
+                        Text("New Note")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(theme.textPrimary)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.background)
     }
 }
 
