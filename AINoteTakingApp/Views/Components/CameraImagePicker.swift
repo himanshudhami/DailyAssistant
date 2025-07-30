@@ -132,8 +132,8 @@ class CameraPermissionHelper: ObservableObject {
     }
 }
 
-// MARK: - Camera Button View
-struct CameraButton: View {
+// MARK: - Camera Image Button View
+struct CameraImageButton: View {
     @Environment(\.appTheme) private var theme
     @StateObject private var permissionHelper = CameraPermissionHelper()
     @State private var showingCamera = false
@@ -235,9 +235,9 @@ enum CameraButtonStyle {
 // MARK: - Preview
 #Preview {
     VStack(spacing: 30) {
-        CameraButton(onImageCaptured: { _ in }, style: .toolbar)
-        CameraButton(onImageCaptured: { _ in }, style: .circular)
-        CameraButton(onImageCaptured: { _ in }, style: .large)
+        CameraImageButton(onImageCaptured: { _ in }, style: .toolbar)
+        CameraImageButton(onImageCaptured: { _ in }, style: .circular)
+        CameraImageButton(onImageCaptured: { _ in }, style: .large)
     }
     .padding()
 }

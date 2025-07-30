@@ -322,10 +322,27 @@ struct NoteMetadataIcons: View {
                 }
             }
 
-            if note.latitude != nil && note.longitude != nil {
-                Image(systemName: "location.fill")
-                    .font(.caption)
-                    .foregroundColor(.green)
+            if let latitude = note.latitude, let longitude = note.longitude {
+                Menu {
+                    Button("Open in Apple Maps") {
+                        openInAppleMaps(latitude: latitude, longitude: longitude)
+                    }
+                    Button("Open in Google Maps") {
+                        openInGoogleMaps(latitude: latitude, longitude: longitude)
+                    }
+                    Button("Copy Coordinates") {
+                        copyCoordinates(latitude: latitude, longitude: longitude)
+                    }
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "location.fill")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        Text(String(format: "%.4f, %.4f", latitude, longitude))
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                    }
+                }
             }
             
             if !note.actionItems.isEmpty {
@@ -339,6 +356,26 @@ struct NoteMetadataIcons: View {
                 }
             }
         }
+    }
+
+    // MARK: - Helper Methods
+    private func openInAppleMaps(latitude: Double, longitude: Double) {
+        let urlString = "http://maps.apple.com/?ll=\(latitude),\(longitude)&q=Note%20Location"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openInGoogleMaps(latitude: Double, longitude: Double) {
+        let urlString = "https://www.google.com/maps/search/?api=1&query=\(latitude),\(longitude)"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func copyCoordinates(latitude: Double, longitude: Double) {
+        let coordinateString = String(format: "%.6f, %.6f", latitude, longitude)
+        UIPasteboard.general.string = coordinateString
     }
 }
 

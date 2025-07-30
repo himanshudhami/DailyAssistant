@@ -3,59 +3,62 @@
 //  AINoteTakingApp
 //
 //  Main view for displaying and managing notes with hierarchical folder organization.
-//  Supports search, filtering, categorization, and multiple view modes (list/grid).
-//  Integrates with SQLite database through Core Data for persistent storage.
+//  Refactored to follow clean architecture and Single Responsibility Principle.
 //
 //  Created by AI Assistant on 2025-01-29.
 //
 
 import SwiftUI
-import CoreData
-import UIKit
-import CoreLocation
 
 struct NotesListView: View {
     @Environment(\.appTheme) private var theme
     @StateObject private var viewModel = NotesListViewModel()
-    
+    @StateObject private var cameraViewModel: CameraProcessingViewModel
+    @StateObject private var alertState = NotesListAlertState()
+
     // Search and filter states
     @State private var searchText = ""
     @State private var selectedCategory: Category?
     @State private var sortOption: NoteSortOption = .modifiedDate
     @State private var viewMode: ViewMode = .list
-    
+
     // Sheet and navigation states
     @State private var selectedNote: Note?
     @State private var showingNoteEditor = false
     @State private var showingVoiceRecorder = false
     @State private var showingCreateFolder = false
-    @State private var showingCamera = false
-    @State private var isProcessingCameraNote = false
-    
-    // Alert states
-    @State private var showingDeleteAlert = false
-    @State private var noteToDelete: Note?
-    @State private var folderToDelete: Folder?
-    @State private var folderToRename: Folder?
-    @State private var newFolderName = ""
-    
+
+    // Initialize camera view model with notes list view model
+    init() {
+        let notesVM = NotesListViewModel()
+        self._viewModel = StateObject(wrappedValue: notesVM)
+        self._cameraViewModel = StateObject(wrappedValue: CameraProcessingViewModel(notesListViewModel: notesVM))
+        self._alertState = StateObject(wrappedValue: NotesListAlertState())
+    }
+
     private var currentFolders: [Folder] {
         return viewModel.folders.filter { $0.parentFolderId == viewModel.currentFolder?.id }
     }
-    
+
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                breadcrumbSection
+                NotesListBreadcrumb(viewModel: viewModel)
                 mainContentSection
             }
             .navigationTitle(viewModel.currentFolder?.name ?? "MyLogs")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
+            .toolbar(content: {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    toolbarContent
+                    NotesListToolbar(
+                        showingVoiceRecorder: $showingVoiceRecorder,
+                        showingCamera: $cameraViewModel.showingCamera,
+                        showingNoteEditor: $showingNoteEditor,
+                        viewModel: viewModel,
+                        isProcessingCamera: cameraViewModel.isProcessing
+                    )
                 }
-            }
+            })
         }
         .searchable(text: $searchText, prompt: "Search logs...")
         .onChange(of: searchText) { newValue in
@@ -86,82 +89,8 @@ struct NotesListView: View {
                 viewModel.createFolder(name: folderName)
             }
         }
-        .sheet(isPresented: $showingCamera) {
-            SimpleCameraView { image in
-                Task { @MainActor in
-                    isProcessingCameraNote = true
-
-                    // Create services
-                    let locationService = SimpleLocationService()
-                    let ocrService = OCRService()
-
-                    // Get location
-                    let location = await locationService.getCurrentLocationSafely()
-                    print("📍 Location captured: \(location?.latitude ?? 0), \(location?.longitude ?? 0)")
-
-                    // Perform OCR
-                    let ocrResult = await ocrService.performOCR(on: image)
-
-                    // Create note with image attachment
-                    let dataManager = DataManager.shared
-                    let currentFolderId = viewModel.currentFolder?.id
-
-                    // Create the note first
-                    let note = dataManager.createCameraNote(
-                        image: image,
-                        ocrText: ocrResult.rawText.isEmpty ? nil : ocrResult.rawText,
-                        latitude: location?.latitude,
-                        longitude: location?.longitude,
-                        folderId: currentFolderId
-                    )
-
-                    // Create and save image attachment
-                    do {
-                        // Get documents directory
-                        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                        let attachmentsDir = documentsDirectory.appendingPathComponent("Attachments")
-
-                        // Create directory if needed
-                        try FileManager.default.createDirectory(at: attachmentsDir, withIntermediateDirectories: true)
-
-                        // Convert image to JPEG data
-                        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-                            throw NSError(domain: "ImageError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to JPEG"])
-                        }
-
-                        // Generate unique filename and save image
-                        let fileName = "\(UUID().uuidString).jpg"
-                        let imageURL = attachmentsDir.appendingPathComponent(fileName)
-                        try imageData.write(to: imageURL)
-
-                        // Create thumbnail
-                        let thumbnailData = image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.7)
-
-                        // Create attachment
-                        let attachment = Attachment(
-                            fileName: fileName,
-                            fileExtension: "jpg",
-                            mimeType: "image/jpeg",
-                            fileSize: Int64(imageData.count),
-                            localURL: imageURL,
-                            thumbnailData: thumbnailData,
-                            type: .image
-                        )
-
-                        var updatedNote = note
-                        updatedNote.attachments = [attachment]
-                        _ = dataManager.updateNote(updatedNote)
-
-                        // Refresh the view
-                        viewModel.loadNotes()
-
-                        isProcessingCameraNote = false
-                    } catch {
-                        print("❌ Failed to create image attachment: \(error)")
-                        isProcessingCameraNote = false
-                    }
-                }
-            }
+        .sheet(isPresented: $cameraViewModel.showingCamera) {
+            CameraViewWithProcessing(cameraViewModel: cameraViewModel)
         }
         .onAppear {
             viewModel.loadNotes()
@@ -170,146 +99,26 @@ struct NotesListView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NotesDidChange"))) { _ in
             viewModel.refresh()
         }
-        .alert("Delete Note", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) {
-                noteToDelete = nil
-            }
-            Button("Delete", role: .destructive) {
-                if let note = noteToDelete {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        viewModel.deleteNote(note)
-                    }
-                }
-                noteToDelete = nil
-            }
-        } message: {
-            if let note = noteToDelete {
-                Text("Are you sure you want to delete \"\(note.title.isEmpty ? "Untitled" : note.title)\"? This action cannot be undone.")
-            }
-        }
-        .alert("Delete Folder", isPresented: Binding<Bool>(
-            get: { folderToDelete != nil },
-            set: { if !$0 { folderToDelete = nil } }
-        )) {
-            Button("Cancel", role: .cancel) {
-                folderToDelete = nil
-            }
-            Button("Move Contents Up", role: .cancel) {
-                if let folder = folderToDelete {
-                    viewModel.deleteFolder(folder, cascadeDelete: false)
-                }
-                folderToDelete = nil
-            }
-            Button("Delete Everything", role: .destructive) {
-                if let folder = folderToDelete {
-                    viewModel.deleteFolder(folder, cascadeDelete: true)
-                }
-                folderToDelete = nil
-            }
-        } message: {
-            if let folder = folderToDelete {
-                Text("Choose how to handle \"\(folder.name)\":\n• Move Contents Up: Move all notes and subfolders to parent\n• Delete Everything: Permanently delete folder and all contents")
-            }
-        }
-        .alert("Rename Folder", isPresented: Binding<Bool>(
-            get: { folderToRename != nil },
-            set: { if !$0 { folderToRename = nil; newFolderName = "" } }
-        )) {
-            TextField("Folder Name", text: $newFolderName)
-            Button("Cancel", role: .cancel) {
-                folderToRename = nil
-                newFolderName = ""
-            }
-            Button("Rename") {
-                if let folder = folderToRename, !newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    var updatedFolder = folder
-                    updatedFolder.name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let index = viewModel.folders.firstIndex(where: { $0.id == folder.id }) {
-                        viewModel.folders[index] = updatedFolder
-                    }
-                }
-                folderToRename = nil
-                newFolderName = ""
-            }
-        } message: {
-            Text("Enter a new name for the folder.")
-        }
+        .notesListAlerts(
+            alertState: alertState,
+            actions: NotesListAlertActionsImpl(viewModel: viewModel)
+        )
     }
 
     // MARK: - Helper Methods
     private func confirmDelete(_ note: Note) {
-        noteToDelete = note
-        showingDeleteAlert = true
+        alertState.confirmDeleteNote(note)
     }
-    
+
+    private func confirmDeleteFolder(_ folder: Folder) {
+        alertState.confirmDeleteFolder(folder)
+    }
+
+    private func confirmRenameFolder(_ folder: Folder) {
+        alertState.confirmRenameFolder(folder)
+    }
+
     // MARK: - Helper Views
-    
-    @ViewBuilder
-    private var breadcrumbSection: some View {
-        if !viewModel.folderHierarchy.isEmpty || viewModel.currentFolder != nil {
-            VStack(spacing: 0) {
-                BreadcrumbView(
-                    hierarchy: viewModel.folderHierarchy,
-                    onNavigate: { folder in
-                        viewModel.enterFolder(folder)
-                    },
-                    onNavigateToRoot: {
-                        viewModel.currentFolder = nil
-                        viewModel.loadFolders()
-                        viewModel.loadNotes()
-                    }
-                )
-                
-                quickFolderSwitcher
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private var quickFolderSwitcher: some View {
-        if !viewModel.folders.isEmpty && viewModel.currentFolder == nil {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(viewModel.folders.prefix(10), id: \.id) { folder in
-                        folderChip(folder)
-                    }
-                }
-                .padding(.horizontal)
-            }
-            .frame(height: 32)
-        }
-    }
-    
-    @ViewBuilder
-    private func folderChip(_ folder: Folder) -> some View {
-        Button(action: {
-            viewModel.enterFolder(folder)
-        }) {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(folderGradient(folder))
-                    .frame(width: 12, height: 12)
-                
-                Text(folder.name)
-                    .font(.caption)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color(.systemGray6))
-            .clipShape(Capsule())
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private func folderGradient(_ folder: Folder) -> LinearGradient {
-        LinearGradient(
-            colors: folder.gradientColors.map { Color(hex: $0) },
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-    
     @ViewBuilder
     private var mainContentSection: some View {
         TopControlsBar(
@@ -320,7 +129,7 @@ struct NotesListView: View {
             categories: viewModel.categories,
             onCreateFolder: { showingCreateFolder = true }
         )
-        
+
         if viewModel.isLoading {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -329,8 +138,8 @@ struct NotesListView: View {
                 EmptyStateView(
                     showingNoteEditor: $showingNoteEditor,
                     showingVoiceRecorder: $showingVoiceRecorder,
-                    showingCamera: $showingCamera,
-                    isProcessingCameraNote: $isProcessingCameraNote
+                    showingCamera: $cameraViewModel.showingCamera,
+                    isProcessingCameraNote: $cameraViewModel.isProcessing
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -341,184 +150,76 @@ struct NotesListView: View {
                     selectedNote: $selectedNote,
                     showingNoteEditor: $showingNoteEditor,
                     onDeleteNote: confirmDelete,
-                    onFolderRename: { folder in
-                        folderToRename = folder
-                        newFolderName = folder.name
-                    },
-                    onFolderDelete: { folder in
-                        folderToDelete = folder
-                    }
+                    onFolderRename: confirmRenameFolder,
+                    onFolderDelete: confirmDeleteFolder
                 )
                 .environmentObject(viewModel)
             }
         }
     }
-    
-    @ViewBuilder
-    private var toolbarContent: some View {
-        HStack(spacing: 16) {
-            Button(action: { showingVoiceRecorder = true }) {
-                Image(systemName: "mic.circle.fill")
-                    .foregroundColor(theme.error)
-                    .font(.title)
-            }
+}
 
-            Button(action: { showingCamera = true }) {
-                Image(systemName: "camera.circle.fill")
-                    .foregroundColor(theme.accent)
-                    .font(.title)
-            }
-            .disabled(isProcessingCameraNote)
+// MARK: - Alert Actions Implementation
+struct NotesListAlertActionsImpl: NotesListAlertActions {
+    let viewModel: NotesListViewModel
 
-            Menu {
-                Button("New Log") {
-                    showingNoteEditor = true
-                }
+    @MainActor
+    func deleteNote(_ note: Note) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            viewModel.deleteNote(note)
+        }
+    }
 
-                if !viewModel.folders.isEmpty && viewModel.currentFolder == nil {
-                    Divider()
-                    Text("Create in Folder:")
-                    ForEach(viewModel.folders.prefix(5), id: \.id) { folder in
-                        Button("📁 \(folder.name)") {
-                            viewModel.enterFolder(folder)
-                            showingNoteEditor = true
-                        }
-                    }
-                }
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundColor(theme.primary)
-                    .font(.title)
-            } primaryAction: {
-                showingNoteEditor = true
-            }
+    @MainActor
+    func deleteFolder(_ folder: Folder, cascadeDelete: Bool) {
+        viewModel.deleteFolder(folder, cascadeDelete: cascadeDelete)
+    }
+
+    @MainActor
+    func renameFolder(_ folder: Folder, newName: String) {
+        var updatedFolder = folder
+        updatedFolder.name = newName
+        if let index = viewModel.folders.firstIndex(where: { $0.id == folder.id }) {
+            viewModel.folders[index] = updatedFolder
         }
     }
 }
 
-// MARK: - Top Controls Bar
-struct TopControlsBar: View {
+#Preview {
+    NotesListView()
+        .environmentObject(NotesListViewModel())
+}
+
+// MARK: - Camera View with Processing (Temporary location)
+struct CameraViewWithProcessing: View {
+    @ObservedObject var cameraViewModel: CameraProcessingViewModel
     @Environment(\.appTheme) private var theme
-    @Binding var searchText: String
-    @Binding var selectedCategory: Category?
-    @Binding var sortOption: NoteSortOption
-    @Binding var viewMode: ViewMode
-    let categories: [Category]
-    let onCreateFolder: (() -> Void)?
-    
+
     var body: some View {
-        VStack(spacing: 8) {
-            // First row: Category and Sort
-            HStack {
-                CategoryFilterButton(
-                    selectedCategory: $selectedCategory,
-                    categories: categories
-                )
-                
-                Spacer()
-                
-                SortOptionsButton(sortOption: $sortOption)
-                
-                if let onCreateFolder = onCreateFolder {
-                    Button(action: onCreateFolder) {
-                        Image(systemName: "folder.badge.plus")
-                            .font(.caption)
-                            .foregroundColor(theme.primary)
-                    }
-                }
-                
-                ViewModeButton(viewMode: $viewMode)
+        ZStack {
+            // Camera interface
+            CameraView { image in
+                cameraViewModel.processCapturedImage(image)
+            }
+
+            // Processing overlay
+            if cameraViewModel.isProcessing {
+                ProcessingOverlay(progress: cameraViewModel.processingProgress)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(theme.background)
-    }
-}
-
-// MARK: - Filter Components
-struct CategoryFilterButton: View {
-    @Environment(\.appTheme) private var theme
-    @Binding var selectedCategory: Category?
-    let categories: [Category]
-    
-    var body: some View {
-        Menu {
-            Button("All Categories") {
-                selectedCategory = nil
+        .alert("Camera Error", isPresented: .constant(cameraViewModel.hasError)) {
+            Button("OK") {
+                cameraViewModel.clearError()
             }
-            
-            Divider()
-            
-            ForEach(categories) { category in
-                Button(category.name) {
-                    selectedCategory = category
-                }
+        } message: {
+            if let errorMessage = cameraViewModel.errorMessage {
+                Text(errorMessage)
             }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "folder")
-                    .font(.caption)
-                Text(selectedCategory?.name ?? "All")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
-            }
-            .foregroundColor(theme.textPrimary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(theme.sectionBackground)
-            .cornerRadius(8)
         }
     }
 }
 
-struct SortOptionsButton: View {
-    @Environment(\.appTheme) private var theme
-    @Binding var sortOption: NoteSortOption
-    
-    var body: some View {
-        Menu {
-            ForEach(NoteSortOption.allCases, id: \.self) { option in
-                Button(option.rawValue) {
-                    sortOption = option
-                }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(.caption)
-                Text(sortOption.rawValue)
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .foregroundColor(theme.textPrimary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(theme.sectionBackground)
-            .cornerRadius(8)
-        }
-    }
-}
 
-struct ViewModeButton: View {
-    @Environment(\.appTheme) private var theme
-    @Binding var viewMode: ViewMode
-    
-    var body: some View {
-        Button(action: {
-            viewMode = viewMode == .grid ? .list : .grid
-        }) {
-            Image(systemName: viewMode.systemImageName)
-                .font(.caption)
-                .foregroundColor(theme.textPrimary)
-                .padding(8)
-                .background(theme.sectionBackground)
-                .cornerRadius(8)
-        }
-    }
-}
 
 // MARK: - Notes Content View
 struct NotesContentView: View {
@@ -911,14 +612,26 @@ struct NoteIndicators: View {
                 }
             }
 
-            if note.latitude != nil && note.longitude != nil {
-                HStack(spacing: 2) {
-                    Image(systemName: "location.fill")
-                        .font(.caption2)
-                        .foregroundColor(.green)
-                    Text("Location")
-                        .font(.caption2)
-                        .foregroundColor(.green)
+            if let latitude = note.latitude, let longitude = note.longitude {
+                Menu {
+                    Button("Open in Apple Maps") {
+                        openInAppleMaps(latitude: latitude, longitude: longitude)
+                    }
+                    Button("Open in Google Maps") {
+                        openInGoogleMaps(latitude: latitude, longitude: longitude)
+                    }
+                    Button("Copy Coordinates") {
+                        copyCoordinates(latitude: latitude, longitude: longitude)
+                    }
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "location.fill")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                        Text(String(format: "%.4f, %.4f", latitude, longitude))
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                    }
                 }
             }
             
@@ -935,6 +648,26 @@ struct NoteIndicators: View {
             
             Spacer()
         }
+    }
+
+    // MARK: - Helper Methods
+    private func openInAppleMaps(latitude: Double, longitude: Double) {
+        let urlString = "http://maps.apple.com/?ll=\(latitude),\(longitude)&q=Note%20Location"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openInGoogleMaps(latitude: Double, longitude: Double) {
+        let urlString = "https://www.google.com/maps/search/?api=1&query=\(latitude),\(longitude)"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func copyCoordinates(latitude: Double, longitude: Double) {
+        let coordinateString = String(format: "%.6f, %.6f", latitude, longitude)
+        UIPasteboard.general.string = coordinateString
     }
 }
 
@@ -1139,173 +872,9 @@ struct EmptyStateView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.background)
     }
-
-
-
-    private func createImageAttachment(from image: UIImage, for note: Note) async throws -> Attachment {
-        // Get documents directory
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let attachmentsDir = documentsDirectory.appendingPathComponent("Attachments")
-
-        // Create directory if needed
-        try FileManager.default.createDirectory(at: attachmentsDir, withIntermediateDirectories: true)
-
-        // Convert image to JPEG data
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            throw NSError(domain: "ImageError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to JPEG"])
-        }
-
-        // Generate unique filename and save image
-        let fileName = "\(UUID().uuidString).jpg"
-        let imageURL = attachmentsDir.appendingPathComponent(fileName)
-        try imageData.write(to: imageURL)
-
-        // Create thumbnail
-        let thumbnailData = image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.7)
-
-        // Create attachment
-        return Attachment(
-            fileName: fileName,
-            fileExtension: "jpg",
-            mimeType: "image/jpeg",
-            fileSize: Int64(imageData.count),
-            localURL: imageURL,
-            thumbnailData: thumbnailData,
-            type: .image
-        )
-    }
-
-
 }
 
-// MARK: - Simple Location Service
-class SimpleLocationService: NSObject, ObservableObject, @unchecked Sendable {
-    private let locationManager = CLLocationManager()
-    private var locationContinuation: CheckedContinuation<(latitude: Double, longitude: Double)?, Never>?
 
-    override init() {
-        super.init()
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-    }
-
-    func getCurrentLocationSafely() async -> (latitude: Double, longitude: Double)? {
-        guard CLLocationManager.locationServicesEnabled() else {
-            print("❌ Location services not enabled")
-            return nil
-        }
-
-        let authStatus = locationManager.authorizationStatus
-        print("📍 Location authorization status: \(authStatus.rawValue)")
-
-        // Request permission if not determined
-        if authStatus == .notDetermined {
-            locationManager.requestWhenInUseAuthorization()
-            // Wait a bit for permission to be processed
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-        }
-
-        let finalStatus = locationManager.authorizationStatus
-        guard finalStatus == .authorizedWhenInUse || finalStatus == .authorizedAlways else {
-            print("❌ Location permission denied. Status: \(finalStatus.rawValue)")
-            return nil
-        }
-
-        print("✅ Location permission granted, requesting location...")
-
-        return await withCheckedContinuation { continuation in
-            locationContinuation = continuation
-            locationManager.requestLocation()
-
-            // Set up timeout
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
-                if self?.locationContinuation != nil {
-                    print("⏰ Location request timed out")
-                    self?.locationContinuation?.resume(returning: nil)
-                    self?.locationContinuation = nil
-                }
-            }
-        }
-    }
-}
-
-extension SimpleLocationService: CLLocationManagerDelegate {
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last, let continuation = locationContinuation else {
-            print("❌ No location or continuation available")
-            return
-        }
-
-        locationContinuation = nil
-        let coordinates = (latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
-        print("✅ Location received: \(coordinates.latitude), \(coordinates.longitude)")
-        continuation.resume(returning: coordinates)
-    }
-
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("❌ Location error: \(error)")
-
-        if let continuation = locationContinuation {
-            locationContinuation = nil
-            continuation.resume(returning: nil)
-        }
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        print("📍 Location authorization changed to: \(manager.authorizationStatus.rawValue)")
-    }
-}
-
-// MARK: - Simple Camera View
-struct SimpleCameraView: UIViewControllerRepresentable {
-    let onImageCaptured: (UIImage) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.delegate = context.coordinator
-        picker.sourceType = .camera
-        picker.allowsEditing = false
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
-        // No updates needed
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: SimpleCameraView
-
-        init(_ parent: SimpleCameraView) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.onImageCaptured(image)
-            }
-            parent.dismiss()
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
-        }
-    }
-}
-
-// MARK: - UIImage Extension for NotesListView
-private extension UIImage {
-    func resizedForEditor(to size: CGSize) -> UIImage {
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { _ in
-            draw(in: CGRect(origin: .zero, size: size))
-        }
-    }
-}
 
 #Preview {
     NotesListView()

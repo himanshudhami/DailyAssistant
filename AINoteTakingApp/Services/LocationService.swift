@@ -56,6 +56,7 @@ class LocationService: NSObject, ObservableObject {
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
     private var locationContinuation: CheckedContinuation<LocationCoordinate, Error>?
+    private var authorizationContinuation: CheckedContinuation<Bool, Never>?
     private let timeout: TimeInterval = 10.0 // 10 seconds timeout
     
     // MARK: - Initialization
@@ -109,10 +110,17 @@ class LocationService: NSObject, ObservableObject {
     
     /// Gets current location with fallback to nil if unavailable
     func getCurrentLocationSafely() async -> LocationCoordinate? {
+        print("📍 LocationService: Attempting to get current location...")
+        print("📍 LocationService: Location services enabled: \(CLLocationManager.locationServicesEnabled())")
+        print("📍 LocationService: Authorization status: \(locationManager.authorizationStatus.rawValue)")
+        print("📍 LocationService: isLocationAvailable: \(isLocationAvailable)")
+
         do {
-            return try await getCurrentLocation()
+            let location = try await getCurrentLocation()
+            print("📍 LocationService: Successfully got location: \(location.latitude), \(location.longitude)")
+            return location
         } catch {
-            print("⚠️ Failed to get location: \(error.localizedDescription)")
+            print("⚠️ LocationService: Failed to get location: \(error.localizedDescription)")
             return nil
         }
     }
@@ -135,16 +143,19 @@ class LocationService: NSObject, ObservableObject {
         case .notDetermined:
             return await withCheckedContinuation { continuation in
                 // Store continuation to resume when authorization changes
-                Task {
-                    locationManager.requestWhenInUseAuthorization()
-                    // Wait a bit for the authorization to process
-                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-                    let newStatus = locationManager.authorizationStatus
-                    let granted = newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways
-                    await MainActor.run {
-                        self.isLocationAvailable = granted
+                authorizationContinuation = continuation
+
+                // Set up timeout for authorization request
+                DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                    if self?.authorizationContinuation != nil {
+                        self?.authorizationContinuation?.resume(returning: false)
+                        self?.authorizationContinuation = nil
                     }
-                    continuation.resume(returning: granted)
+                }
+
+                // Request authorization on background queue to avoid main thread warning
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    self?.locationManager.requestWhenInUseAuthorization()
                 }
             }
         @unknown default:
@@ -157,42 +168,55 @@ class LocationService: NSObject, ObservableObject {
 // MARK: - CLLocationManagerDelegate
 extension LocationService: CLLocationManagerDelegate {
     
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
-        
+
         let coordinate = LocationCoordinate(
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
             accuracy: location.horizontalAccuracy,
             timestamp: location.timestamp
         )
-        
-        currentLocation = coordinate
-        
-        // Resume continuation if waiting
-        if let continuation = locationContinuation {
-            locationContinuation = nil
-            
-            if coordinate.isValid {
-                continuation.resume(returning: coordinate)
-            } else {
-                continuation.resume(throwing: LocationServiceError.accuracyTooLow)
+
+        Task { @MainActor in
+            currentLocation = coordinate
+
+            // Resume continuation if waiting
+            if let continuation = locationContinuation {
+                locationContinuation = nil
+
+                if coordinate.isValid {
+                    continuation.resume(returning: coordinate)
+                } else {
+                    continuation.resume(throwing: LocationServiceError.accuracyTooLow)
+                }
             }
         }
     }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("❌ Location manager failed with error: \(error)")
-        
-        // Resume continuation with error if waiting
-        if let continuation = locationContinuation {
-            locationContinuation = nil
-            continuation.resume(throwing: LocationServiceError.locationUnavailable)
+
+        Task { @MainActor in
+            // Resume continuation with error if waiting
+            if let continuation = locationContinuation {
+                locationContinuation = nil
+                continuation.resume(throwing: LocationServiceError.locationUnavailable)
+            }
         }
     }
-    
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        checkLocationAvailability()
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor in
+            checkLocationAvailability()
+
+            // Handle pending authorization request
+            if let continuation = authorizationContinuation {
+                authorizationContinuation = nil
+                let granted = manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways
+                continuation.resume(returning: granted)
+            }
+        }
     }
 }
 
