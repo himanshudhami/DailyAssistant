@@ -11,6 +11,7 @@
 
 import Foundation
 import CoreData
+import UIKit
 
 class DataManager: ObservableObject {
     static let shared = DataManager()
@@ -291,17 +292,66 @@ extension DataManager {
         let noteEntity = NoteEntity(context: context)
         note.updateEntity(noteEntity, context: context)
         save()
-        
+
         if let folderId = note.folderId {
             updateFolderNoteCount(folderId)
         }
-        
+
         // Index note for search
         Task {
             let searchService = await getSemanticSearchService()
             await searchService.updateNoteEmbedding(for: note)
         }
-        
+
+        return note
+    }
+
+    func createCameraNote(
+        image: UIImage,
+        ocrText: String?,
+        latitude: Double?,
+        longitude: Double?,
+        folderId: UUID? = nil
+    ) -> Note {
+        let noteEntity = NoteEntity(context: context)
+
+        // Generate title with timestamp
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        let timestamp = formatter.string(from: Date())
+        let title = "Camera Note - \(timestamp)"
+
+        // Create content from OCR text
+        var content = ""
+        if let ocrText = ocrText, !ocrText.isEmpty {
+            content = "--- Text from image ---\n\(ocrText)"
+        }
+
+        let note = Note(
+            title: title,
+            content: content,
+            folderId: folderId,
+            ocrText: ocrText,
+            latitude: latitude,
+            longitude: longitude
+        )
+
+        print("📝 Creating camera note with location: \(latitude ?? 0), \(longitude ?? 0)")
+
+        note.updateEntity(noteEntity, context: context)
+        save()
+
+        if let folderId = folderId {
+            updateFolderNoteCount(folderId)
+        }
+
+        // Index note for search
+        Task {
+            let searchService = await getSemanticSearchService()
+            await searchService.updateNoteEmbedding(for: note)
+        }
+
         return note
     }
     

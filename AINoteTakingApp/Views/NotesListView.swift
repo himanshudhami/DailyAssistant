@@ -11,6 +11,8 @@
 
 import SwiftUI
 import CoreData
+import UIKit
+import CoreLocation
 
 struct NotesListView: View {
     @Environment(\.appTheme) private var theme
@@ -27,6 +29,8 @@ struct NotesListView: View {
     @State private var showingNoteEditor = false
     @State private var showingVoiceRecorder = false
     @State private var showingCreateFolder = false
+    @State private var showingCamera = false
+    @State private var isProcessingCameraNote = false
     
     // Alert states
     @State private var showingDeleteAlert = false
@@ -80,6 +84,83 @@ struct NotesListView: View {
         .sheet(isPresented: $showingCreateFolder) {
             CreateFolderSheet { folderName in
                 viewModel.createFolder(name: folderName)
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            SimpleCameraView { image in
+                Task { @MainActor in
+                    isProcessingCameraNote = true
+
+                    // Create services
+                    let locationService = SimpleLocationService()
+                    let ocrService = OCRService()
+
+                    // Get location
+                    let location = await locationService.getCurrentLocationSafely()
+                    print("📍 Location captured: \(location?.latitude ?? 0), \(location?.longitude ?? 0)")
+
+                    // Perform OCR
+                    let ocrResult = await ocrService.performOCR(on: image)
+
+                    // Create note with image attachment
+                    let dataManager = DataManager.shared
+                    let currentFolderId = viewModel.currentFolder?.id
+
+                    // Create the note first
+                    let note = dataManager.createCameraNote(
+                        image: image,
+                        ocrText: ocrResult.rawText.isEmpty ? nil : ocrResult.rawText,
+                        latitude: location?.latitude,
+                        longitude: location?.longitude,
+                        folderId: currentFolderId
+                    )
+
+                    // Create and save image attachment
+                    do {
+                        // Get documents directory
+                        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        let attachmentsDir = documentsDirectory.appendingPathComponent("Attachments")
+
+                        // Create directory if needed
+                        try FileManager.default.createDirectory(at: attachmentsDir, withIntermediateDirectories: true)
+
+                        // Convert image to JPEG data
+                        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                            throw NSError(domain: "ImageError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to JPEG"])
+                        }
+
+                        // Generate unique filename and save image
+                        let fileName = "\(UUID().uuidString).jpg"
+                        let imageURL = attachmentsDir.appendingPathComponent(fileName)
+                        try imageData.write(to: imageURL)
+
+                        // Create thumbnail
+                        let thumbnailData = image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.7)
+
+                        // Create attachment
+                        let attachment = Attachment(
+                            fileName: fileName,
+                            fileExtension: "jpg",
+                            mimeType: "image/jpeg",
+                            fileSize: Int64(imageData.count),
+                            localURL: imageURL,
+                            thumbnailData: thumbnailData,
+                            type: .image
+                        )
+
+                        var updatedNote = note
+                        updatedNote.attachments = [attachment]
+                        _ = dataManager.updateNote(updatedNote)
+
+                        // Refresh the view
+                        viewModel.loadNotes()
+
+                        isProcessingCameraNote = false
+                    } catch {
+                        print("❌ Failed to create image attachment: \(error)")
+                        isProcessingCameraNote = false
+                    }
+                }
             }
         }
         .onAppear {
@@ -247,7 +328,9 @@ struct NotesListView: View {
             if viewModel.filteredNotes.isEmpty && currentFolders.isEmpty {
                 EmptyStateView(
                     showingNoteEditor: $showingNoteEditor,
-                    showingVoiceRecorder: $showingVoiceRecorder
+                    showingVoiceRecorder: $showingVoiceRecorder,
+                    showingCamera: $showingCamera,
+                    isProcessingCameraNote: $isProcessingCameraNote
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -279,12 +362,19 @@ struct NotesListView: View {
                     .foregroundColor(theme.error)
                     .font(.title)
             }
-            
+
+            Button(action: { showingCamera = true }) {
+                Image(systemName: "camera.circle.fill")
+                    .foregroundColor(theme.accent)
+                    .font(.title)
+            }
+            .disabled(isProcessingCameraNote)
+
             Menu {
                 Button("New Log") {
                     showingNoteEditor = true
                 }
-                
+
                 if !viewModel.folders.isEmpty && viewModel.currentFolder == nil {
                     Divider()
                     Text("Create in Folder:")
@@ -820,6 +910,17 @@ struct NoteIndicators: View {
                         .foregroundColor(theme.success)
                 }
             }
+
+            if note.latitude != nil && note.longitude != nil {
+                HStack(spacing: 2) {
+                    Image(systemName: "location.fill")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                    Text("Location")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                }
+            }
             
             if note.aiSummary != nil {
                 HStack(spacing: 2) {
@@ -934,6 +1035,8 @@ struct EmptyStateView: View {
     @Environment(\.appTheme) private var theme
     @Binding var showingNoteEditor: Bool
     @Binding var showingVoiceRecorder: Bool
+    @Binding var showingCamera: Bool
+    @Binding var isProcessingCameraNote: Bool
     
     var body: some View {
         VStack(spacing: 40) {
@@ -967,12 +1070,12 @@ struct EmptyStateView: View {
                             Circle()
                                 .fill(theme.error.opacity(0.2))
                                 .frame(width: 100, height: 100)
-                            
+
                             Image(systemName: "mic.fill")
                                 .font(.system(size: 40))
                                 .foregroundColor(theme.error)
                         }
-                        
+
                         Text("Voice Note")
                             .font(.headline)
                             .fontWeight(.semibold)
@@ -980,7 +1083,31 @@ struct EmptyStateView: View {
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
-                
+
+                // Camera Note Button
+                Button(action: {
+                    showingCamera = true
+                }) {
+                    VStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(theme.accent.opacity(0.2))
+                                .frame(width: 100, height: 100)
+
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(theme.accent)
+                        }
+
+                        Text("Camera Note")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(theme.textPrimary)
+                    }
+                }
+                .disabled(isProcessingCameraNote)
+                .buttonStyle(PlainButtonStyle())
+
                 // Text Note Button
                 Button(action: {
                     showingNoteEditor = true
@@ -990,13 +1117,13 @@ struct EmptyStateView: View {
                             Circle()
                                 .fill(theme.primary.opacity(0.2))
                                 .frame(width: 100, height: 100)
-                            
+
                             Image(systemName: "plus")
                                 .font(.system(size: 40))
                                 .fontWeight(.medium)
                                 .foregroundColor(theme.primary)
                         }
-                        
+
                         Text("New Note")
                             .font(.headline)
                             .fontWeight(.semibold)
@@ -1011,6 +1138,172 @@ struct EmptyStateView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.background)
+    }
+
+
+
+    private func createImageAttachment(from image: UIImage, for note: Note) async throws -> Attachment {
+        // Get documents directory
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let attachmentsDir = documentsDirectory.appendingPathComponent("Attachments")
+
+        // Create directory if needed
+        try FileManager.default.createDirectory(at: attachmentsDir, withIntermediateDirectories: true)
+
+        // Convert image to JPEG data
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            throw NSError(domain: "ImageError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to JPEG"])
+        }
+
+        // Generate unique filename and save image
+        let fileName = "\(UUID().uuidString).jpg"
+        let imageURL = attachmentsDir.appendingPathComponent(fileName)
+        try imageData.write(to: imageURL)
+
+        // Create thumbnail
+        let thumbnailData = image.resizedForEditor(to: CGSize(width: 200, height: 200)).jpegData(compressionQuality: 0.7)
+
+        // Create attachment
+        return Attachment(
+            fileName: fileName,
+            fileExtension: "jpg",
+            mimeType: "image/jpeg",
+            fileSize: Int64(imageData.count),
+            localURL: imageURL,
+            thumbnailData: thumbnailData,
+            type: .image
+        )
+    }
+
+
+}
+
+// MARK: - Simple Location Service
+class SimpleLocationService: NSObject, ObservableObject, @unchecked Sendable {
+    private let locationManager = CLLocationManager()
+    private var locationContinuation: CheckedContinuation<(latitude: Double, longitude: Double)?, Never>?
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+
+    func getCurrentLocationSafely() async -> (latitude: Double, longitude: Double)? {
+        guard CLLocationManager.locationServicesEnabled() else {
+            print("❌ Location services not enabled")
+            return nil
+        }
+
+        let authStatus = locationManager.authorizationStatus
+        print("📍 Location authorization status: \(authStatus.rawValue)")
+
+        // Request permission if not determined
+        if authStatus == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+            // Wait a bit for permission to be processed
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        }
+
+        let finalStatus = locationManager.authorizationStatus
+        guard finalStatus == .authorizedWhenInUse || finalStatus == .authorizedAlways else {
+            print("❌ Location permission denied. Status: \(finalStatus.rawValue)")
+            return nil
+        }
+
+        print("✅ Location permission granted, requesting location...")
+
+        return await withCheckedContinuation { continuation in
+            locationContinuation = continuation
+            locationManager.requestLocation()
+
+            // Set up timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+                if self?.locationContinuation != nil {
+                    print("⏰ Location request timed out")
+                    self?.locationContinuation?.resume(returning: nil)
+                    self?.locationContinuation = nil
+                }
+            }
+        }
+    }
+}
+
+extension SimpleLocationService: CLLocationManagerDelegate {
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, let continuation = locationContinuation else {
+            print("❌ No location or continuation available")
+            return
+        }
+
+        locationContinuation = nil
+        let coordinates = (latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
+        print("✅ Location received: \(coordinates.latitude), \(coordinates.longitude)")
+        continuation.resume(returning: coordinates)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("❌ Location error: \(error)")
+
+        if let continuation = locationContinuation {
+            locationContinuation = nil
+            continuation.resume(returning: nil)
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        print("📍 Location authorization changed to: \(manager.authorizationStatus.rawValue)")
+    }
+}
+
+// MARK: - Simple Camera View
+struct SimpleCameraView: UIViewControllerRepresentable {
+    let onImageCaptured: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .camera
+        picker.allowsEditing = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        // No updates needed
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: SimpleCameraView
+
+        init(_ parent: SimpleCameraView) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImageCaptured(image)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+
+// MARK: - UIImage Extension for NotesListView
+private extension UIImage {
+    func resizedForEditor(to size: CGSize) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 }
 

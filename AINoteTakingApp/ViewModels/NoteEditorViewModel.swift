@@ -43,7 +43,9 @@ class NoteEditorViewModel: ObservableObject {
     @Published var aiSummary: String?
     @Published var keyPoints: [String] = []
     @Published var ocrText: String?
-    
+    @Published var latitude: Double?
+    @Published var longitude: Double?
+
     @Published var isProcessing = false
     @Published var isSaving = false
     @Published var errorMessage: String?
@@ -62,7 +64,7 @@ class NoteEditorViewModel: ObservableObject {
     
     var hasChanges: Bool {
         guard let originalNote = originalNote else { return hasContent }
-        
+
         return title != originalNote.title ||
                content != originalNote.content ||
                tags != originalNote.tags ||
@@ -70,7 +72,9 @@ class NoteEditorViewModel: ObservableObject {
                attachments.count != originalNote.attachments.count ||
                audioURL != originalNote.audioURL ||
                transcript != originalNote.transcript ||
-               ocrText != originalNote.ocrText
+               ocrText != originalNote.ocrText ||
+               latitude != originalNote.latitude ||
+               longitude != originalNote.longitude
     }
     
     // MARK: - Private Properties
@@ -105,6 +109,8 @@ class NoteEditorViewModel: ObservableObject {
         aiSummary = note.aiSummary
         keyPoints = note.keyPoints
         ocrText = note.ocrText
+        latitude = note.latitude
+        longitude = note.longitude
     }
     
     private func setupAutoSave() {
@@ -167,7 +173,9 @@ class NoteEditorViewModel: ObservableObject {
             keyPoints: keyPoints,
             actionItems: actionItems,
             transcript: transcript,
-            ocrText: ocrText
+            ocrText: ocrText,
+            latitude: latitude,
+            longitude: longitude
         )
     }
     
@@ -428,6 +436,8 @@ class NoteEditorViewModel: ObservableObject {
             aiSummary = nil
             keyPoints = []
             ocrText = nil
+            latitude = nil
+            longitude = nil
         }
     }
 }

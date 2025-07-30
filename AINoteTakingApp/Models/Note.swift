@@ -115,6 +115,8 @@ struct Note: Codable, Identifiable, Hashable {
     var actionItems: [ActionItem]
     var transcript: String?
     var ocrText: String?
+    var latitude: Double?
+    var longitude: Double?
     
     init(
         id: UUID = UUID(),
@@ -131,7 +133,9 @@ struct Note: Codable, Identifiable, Hashable {
         keyPoints: [String] = [],
         actionItems: [ActionItem] = [],
         transcript: String? = nil,
-        ocrText: String? = nil
+        ocrText: String? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil
     ) {
         self.id = id
         self.title = title
@@ -148,6 +152,8 @@ struct Note: Codable, Identifiable, Hashable {
         self.actionItems = actionItems
         self.transcript = transcript
         self.ocrText = ocrText
+        self.latitude = latitude
+        self.longitude = longitude
     }
 }
 
@@ -348,6 +354,8 @@ extension Note {
         } ?? []
         self.transcript = entity.transcript
         self.ocrText = entity.ocrText
+        self.latitude = entity.latitude == 0 ? nil : entity.latitude
+        self.longitude = entity.longitude == 0 ? nil : entity.longitude
     }
     
     func updateEntity(_ entity: NoteEntity, context: NSManagedObjectContext) {
@@ -362,6 +370,8 @@ extension Note {
         entity.keyPoints = self.keyPoints.joined(separator: "\n")
         entity.transcript = self.transcript
         entity.ocrText = self.ocrText
+        entity.latitude = self.latitude ?? 0
+        entity.longitude = self.longitude ?? 0
         
         // Update folder relationship
         if let folderId = self.folderId {

@@ -321,6 +321,12 @@ struct NoteMetadataIcons: View {
                         .foregroundColor(.purple)
                 }
             }
+
+            if note.latitude != nil && note.longitude != nil {
+                Image(systemName: "location.fill")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
             
             if !note.actionItems.isEmpty {
                 HStack(spacing: 2) {

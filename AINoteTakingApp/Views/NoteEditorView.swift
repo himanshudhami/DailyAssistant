@@ -42,7 +42,12 @@ struct NoteEditorView: View {
                                 audioManager: audioManager
                             )
                         }
-                        
+
+                        // Location
+                        if hasLocationData {
+                            LocationSection(viewModel: viewModel)
+                        }
+
                         // Organization
                         OrganizationSection(viewModel: viewModel)
                     }
@@ -118,6 +123,10 @@ struct NoteEditorView: View {
         !viewModel.attachments.isEmpty ||
         viewModel.audioURL != nil ||
         audioManager.isRecording
+    }
+
+    private var hasLocationData: Bool {
+        viewModel.latitude != nil && viewModel.longitude != nil
     }
     
     // MARK: - Helper Methods
@@ -764,6 +773,123 @@ struct FlowResult {
     }
 }
 
+
+// MARK: - Location Section
+struct LocationSection: View {
+    @Environment(\.appTheme) private var theme
+    @ObservedObject var viewModel: NoteEditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionHeader(
+                title: "Location",
+                icon: "location.fill",
+                color: .green
+            )
+
+            if let latitude = viewModel.latitude, let longitude = viewModel.longitude {
+                LocationCard(
+                    latitude: latitude,
+                    longitude: longitude
+                )
+            } else {
+                Text("No location data available")
+                    .font(.body)
+                    .foregroundColor(theme.textSecondary)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.cardBackground)
+                    .cornerRadius(12)
+            }
+        }
+    }
+}
+
+// MARK: - Location Card
+struct LocationCard: View {
+    @Environment(\.appTheme) private var theme
+    let latitude: Double
+    let longitude: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "location.fill")
+                    .foregroundColor(.green)
+                    .font(.title3)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("GPS Coordinates")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(theme.textPrimary)
+
+                    Text(coordinateString)
+                        .font(.body)
+                        .foregroundColor(theme.textSecondary)
+                        .textSelection(.enabled)
+                }
+
+                Spacer()
+            }
+
+            // Map buttons
+            HStack(spacing: 12) {
+                Button(action: openInAppleMaps) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "map.fill")
+                        Text("Apple Maps")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+                }
+
+                Button(action: openInGoogleMaps) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "globe")
+                        Text("Google Maps")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.red)
+                    .cornerRadius(8)
+                }
+
+                Spacer()
+            }
+        }
+        .padding()
+        .background(theme.cardBackground)
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+
+    private var coordinateString: String {
+        return String(format: "%.6f, %.6f", latitude, longitude)
+    }
+
+    private func openInAppleMaps() {
+        let urlString = "http://maps.apple.com/?ll=\(latitude),\(longitude)&q=Note%20Location"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openInGoogleMaps() {
+        let urlString = "https://www.google.com/maps/search/?api=1&query=\(latitude),\(longitude)"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
+    }
+}
 
 // MARK: - Extensions moved to AttachmentComponents.swift
 
