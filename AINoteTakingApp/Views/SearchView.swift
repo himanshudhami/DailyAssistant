@@ -17,6 +17,7 @@ struct SearchView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedNote: Note?
     @State private var showingNoteEditor = false
+    @State private var showingImageGallery = false
     
     var body: some View {
         NavigationView {
@@ -58,6 +59,9 @@ struct SearchView: View {
                             onSearchRemoved: viewModel.removeRecentSearch,
                             onSuggestionTapped: { suggestion in
                                 viewModel.searchText = suggestion
+                            },
+                            onImageGalleryTapped: {
+                                showingImageGallery = true
                             }
                         )
                     }
@@ -66,6 +70,15 @@ struct SearchView: View {
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showingImageGallery = true
+                    }) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .foregroundColor(.blue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
@@ -75,6 +88,9 @@ struct SearchView: View {
         }
         .sheet(item: $selectedNote) { note in
             NoteEditorView(note: note)
+        }
+        .sheet(isPresented: $showingImageGallery) {
+            ImageGalleryView()
         }
     }
     
@@ -104,6 +120,7 @@ struct SearchHomeContent: View {
     let onSearchSelected: (String) -> Void
     let onSearchRemoved: (String) -> Void
     let onSuggestionTapped: (String) -> Void
+    let onImageGalleryTapped: (() -> Void)?
     
     var body: some View {
         VStack(spacing: 32) {
@@ -117,7 +134,10 @@ struct SearchHomeContent: View {
             }
             
             // Search Suggestions
-            SearchSuggestionsView(onSuggestionTapped: onSuggestionTapped)
+            SearchSuggestionsView(
+                onSuggestionTapped: onSuggestionTapped,
+                onImageGalleryTapped: onImageGalleryTapped
+            )
             
             // Search Tips
             SearchTipsView()
@@ -200,6 +220,7 @@ struct SearchTipRow: View {
 
 struct SearchSuggestionsView: View {
     let onSuggestionTapped: (String) -> Void
+    let onImageGalleryTapped: (() -> Void)?
     
     private let suggestions = [
         ("meeting notes", "person.2"),
@@ -239,6 +260,44 @@ struct SearchSuggestionsView: View {
                 }
             }
             .padding(.horizontal)
+            
+            // Image Gallery Quick Access
+            if let onImageGalleryTapped = onImageGalleryTapped {
+                Button(action: onImageGalleryTapped) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .foregroundColor(.purple)
+                            .font(.title2)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Browse Image Gallery")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            
+                            Text("View all images from your notes")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    .padding()
+                    .background(
+                        LinearGradient(
+                            colors: [Color.purple.opacity(0.1), Color.blue.opacity(0.1)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+            }
         }
         .padding(.top)
     }

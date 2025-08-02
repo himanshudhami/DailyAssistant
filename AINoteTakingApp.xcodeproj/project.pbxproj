@@ -54,6 +54,11 @@
 		C681F3882E37A803000A7FB3 /* SecurityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3672E37A803000A7FB3 /* SecurityManager.swift */; };
 		C681F3892E37A803000A7FB3 /* SystemIntegrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F36D2E37A803000A7FB3 /* SystemIntegrations.swift */; };
 		C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C681F3752E37A803000A7FB3 /* NotesListView.swift */; };
+		C6FB017F2E3CCB1200763881 /* ImageGalleryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB017D2E3CCB1200763881 /* ImageGalleryViewModel.swift */; };
+		C6FB01832E3CCB4300763881 /* ImageGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB01812E3CCB4300763881 /* ImageGalleryView.swift */; };
+		C6FB01842E3CCB4300763881 /* ImageDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB01802E3CCB4300763881 /* ImageDetailView.swift */; };
+		C6FB01862E3CCCC500763881 /* ImageGalleryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB01852E3CCCC500763881 /* ImageGalleryModels.swift */; };
+		C6FB01892E3CCCDA00763881 /* ImageMetadataSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB01872E3CCCDA00763881 /* ImageMetadataSearchService.swift */; };
 		DD7D66BBD1404FDAA6ED4B30 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3F77C13E4D4B8BB3C45B91 /* SearchView.swift */; };
 		EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091A27012A9941A38EB6AA24 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
@@ -110,6 +115,11 @@
 		C681F3752E37A803000A7FB3 /* NotesListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesListView.swift; sourceTree = "<group>"; };
 		C681F3762E37A803000A7FB3 /* PermissionsOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsOnboardingView.swift; sourceTree = "<group>"; };
 		C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecorderView.swift; sourceTree = "<group>"; };
+		C6FB017D2E3CCB1200763881 /* ImageGalleryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryViewModel.swift; sourceTree = "<group>"; };
+		C6FB01802E3CCB4300763881 /* ImageDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDetailView.swift; sourceTree = "<group>"; };
+		C6FB01812E3CCB4300763881 /* ImageGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryView.swift; sourceTree = "<group>"; };
+		C6FB01852E3CCCC500763881 /* ImageGalleryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryModels.swift; sourceTree = "<group>"; };
+		C6FB01872E3CCCDA00763881 /* ImageMetadataSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMetadataSearchService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -168,6 +178,7 @@
 		C61E5FA22E398D4300506179 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				C6FB01882E3CCCDA00763881 /* ImageSearch */,
 				C61E5FBF2E3AADAC00506179 /* AttachmentService.swift */,
 				C61E5FC02E3AADAC00506179 /* CameraProcessingService.swift */,
 				C61E5FC12E3AADAC00506179 /* LocationService.swift */,
@@ -224,6 +235,7 @@
 		C681F36A2E37A803000A7FB3 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				C6FB01852E3CCCC500763881 /* ImageGalleryModels.swift */,
 				C61E5FAD2E398DC600506179 /* ChatMessage.swift */,
 				C681F3692E37A803000A7FB3 /* Note.swift */,
 			);
@@ -243,6 +255,7 @@
 		C681F3712E37A803000A7FB3 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				C6FB017E2E3CCB1200763881 /* ImageGallery */,
 				C61E5FD12E3AB55A00506179 /* CameraProcessingViewModel.swift */,
 				C681F36F2E37A803000A7FB3 /* NoteEditorViewModel.swift */,
 				C681F3702E37A803000A7FB3 /* NotesListViewModel.swift */,
@@ -254,6 +267,7 @@
 		C681F3782E37A803000A7FB3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C6FB01822E3CCB4300763881 /* ImageGallery */,
 				C61E5FB92E3A139B00506179 /* Components */,
 				C61E5FA82E398D7B00506179 /* Chat */,
 				C657B0192E38431400A40BDC /* FolderView.swift */,
@@ -266,6 +280,31 @@
 				C681F3772E37A803000A7FB3 /* VoiceRecorderView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		C6FB017E2E3CCB1200763881 /* ImageGallery */ = {
+			isa = PBXGroup;
+			children = (
+				C6FB017D2E3CCB1200763881 /* ImageGalleryViewModel.swift */,
+			);
+			path = ImageGallery;
+			sourceTree = "<group>";
+		};
+		C6FB01822E3CCB4300763881 /* ImageGallery */ = {
+			isa = PBXGroup;
+			children = (
+				C6FB01802E3CCB4300763881 /* ImageDetailView.swift */,
+				C6FB01812E3CCB4300763881 /* ImageGalleryView.swift */,
+			);
+			path = ImageGallery;
+			sourceTree = "<group>";
+		};
+		C6FB01882E3CCCDA00763881 /* ImageSearch */ = {
+			isa = PBXGroup;
+			children = (
+				C6FB01872E3CCCDA00763881 /* ImageMetadataSearchService.swift */,
+			);
+			path = ImageSearch;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -354,6 +393,7 @@
 				C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */,
 				C61E5FCB2E3AADC300506179 /* NotesListAlerts.swift in Sources */,
 				C61E5FCC2E3AADC300506179 /* TopControlsBar.swift in Sources */,
+				C6FB01892E3CCCDA00763881 /* ImageMetadataSearchService.swift in Sources */,
 				C61E5FCD2E3AADC300506179 /* CameraImagePicker.swift in Sources */,
 				C61E5FCE2E3AADC300506179 /* CameraView.swift in Sources */,
 				C61E5FCF2E3AADC300506179 /* NotesListBreadcrumb.swift in Sources */,
@@ -366,6 +406,7 @@
 				C61E5FAB2E398D7B00506179 /* ChatInputView.swift in Sources */,
 				C61E5FAC2E398D7B00506179 /* ChatMessageView.swift in Sources */,
 				C681F38A2E37A803000A7FB3 /* NotesListView.swift in Sources */,
+				C6FB01862E3CCCC500763881 /* ImageGalleryModels.swift in Sources */,
 				C681F3852E37A803000A7FB3 /* NoteEditorView.swift in Sources */,
 				C61E5FB12E398DEB00506179 /* OCRService.swift in Sources */,
 				C61E5FB22E398DEB00506179 /* SpeechRecognitionManager.swift in Sources */,
@@ -381,10 +422,13 @@
 				EA3892081C1847A68BDCAFDF /* SettingsView.swift in Sources */,
 				C681F37E2E37A803000A7FB3 /* NotesListViewModel.swift in Sources */,
 				C681F3832E37A803000A7FB3 /* NoteEditorViewModel.swift in Sources */,
+				C6FB01832E3CCB4300763881 /* ImageGalleryView.swift in Sources */,
+				C6FB01842E3CCB4300763881 /* ImageDetailView.swift in Sources */,
 				C681F3872E37A803000A7FB3 /* PermissionManager.swift in Sources */,
 				C681F37F2E37A803000A7FB3 /* PermissionsOnboardingView.swift in Sources */,
 				C681F37B2E37A803000A7FB3 /* Constants.swift in Sources */,
 				C681F3892E37A803000A7FB3 /* SystemIntegrations.swift in Sources */,
+				C6FB017F2E3CCB1200763881 /* ImageGalleryViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
