@@ -81,6 +81,7 @@ class NoteEditorViewModel: ObservableObject {
     private let originalNote: Note?
     private let currentFolder: Folder?
     private let dataManager = DataManager.shared
+    private let networkService = NetworkService.shared
     private let aiProcessor = AIProcessor()
     private let fileImportManager = FileImportManager()
     private var cancellables = Set<AnyCancellable>()
@@ -129,16 +130,210 @@ class NoteEditorViewModel: ObservableObject {
         
         let noteToSave = createNoteFromCurrentData()
         
-        if originalNote != nil {
-            // Update existing note - this properly saves attachments via updateEntity
-            dataManager.updateNote(noteToSave)
-        } else {
-            // Create new note - use createNoteFromData to save all properties including attachments
-            let _ = dataManager.createNoteFromData(noteToSave)
+        do {
+            // Save locally first (immediate save)
+            if originalNote != nil {
+                // Update existing note
+                dataManager.updateNote(noteToSave)
+            } else {
+                // Create new note
+                let _ = dataManager.createNoteFromData(noteToSave)
+            }
+            
+            // Save to backend (only if authenticated)
+            var backendNote: Note? = nil
+            if networkService.isAuthenticated {
+                backendNote = try await saveToBackend(noteToSave)
+                
+                // Upload attachments after note is created/updated using backend note ID
+                if !noteToSave.attachments.isEmpty, let backendNote = backendNote {
+                    try await uploadAttachments(for: backendNote, originalAttachments: noteToSave.attachments)
+                }
+            }
+            
+            await MainActor.run {
+                self.isSaving = false
+                print("✅ Note saved successfully - Local: ✓ Backend: \(networkService.isAuthenticated ? "✓" : "⚠️ Offline")")
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.isSaving = false
+                self.errorMessage = "Failed to save note: \(error.localizedDescription)"
+                print("❌ Note save failed: \(error)")
+            }
         }
+    }
+    
+    private func saveToBackend(_ note: Note) async throws -> Note {
+        return try await withCheckedThrowingContinuation { continuation in
+            
+            // Prepare note for backend (handle local-only data)
+            let backendNote = prepareNoteForBackend(note)
+            
+            // Check if this note exists on backend or is local-only
+            if originalNote != nil && isNoteSyncedToBackend(note) {
+                // Update existing note that exists on backend
+                print("🔄 Updating existing backend note: \(backendNote.title)")
+                networkService.notes.updateNote(
+                    backendNote.id,
+                    title: backendNote.title,
+                    content: backendNote.content,
+                    tags: backendNote.tags,
+                    folderId: backendNote.folderId,
+                    categoryId: nil // Skip category for now until properly synced
+                )
+                .sink(
+                    receiveCompletion: { completion in
+                        switch completion {
+                        case .finished:
+                            break
+                        case .failure(let error):
+                            print("❌ Backend update failed, will try creating as new note instead")
+                            // If update fails, try creating as new note (fallback for local-only notes)
+                            self.createNoteOnBackend(backendNote, continuation: continuation)
+                        }
+                    },
+                    receiveValue: { updatedNote in
+                        print("✅ Note updated on backend: \(updatedNote.title) (ID: \(updatedNote.id))")
+                        continuation.resume(returning: updatedNote)
+                    }
+                )
+                .store(in: &cancellables)
+            } else {
+                // Create new note (either truly new or local-only existing note)
+                print("➕ Creating new note on backend: \(backendNote.title)")
+                createNoteOnBackend(backendNote, continuation: continuation)
+            }
+        }
+    }
+    
+    private func createNoteOnBackend(_ note: Note, continuation: CheckedContinuation<Note, Error>) {
+        networkService.notes.createNote(note)
+            .sink(
+                receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        print("❌ Backend creation error: \(error)")
+                        continuation.resume(throwing: error)
+                    }
+                },
+                receiveValue: { createdNote in
+                    print("✅ Note created on backend: \(createdNote.title) (ID: \(createdNote.id))")
+                    // Mark this note as synced for future reference
+                    self.markNoteAsSynced(createdNote)
+                    continuation.resume(returning: createdNote)
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    private func isNoteSyncedToBackend(_ note: Note) -> Bool {
+        // Check if this note has been synced to backend before
+        let key = "synced_note_\(note.id)"
+        return UserDefaults.standard.bool(forKey: key)
+    }
+    
+    private func markNoteAsSynced(_ note: Note) {
+        let key = "synced_note_\(note.id)"
+        UserDefaults.standard.set(true, forKey: key)
+    }
+    
+    private func prepareNoteForBackend(_ note: Note) -> Note {
+        // Create a copy of the note without local-only data that might cause validation errors
+        var backendNote = note
         
-        await MainActor.run {
-            self.isSaving = false
+        // For now, don't send category_id until we implement proper category sync
+        // This prevents "category not found" errors
+        backendNote.category = nil
+        
+        // Also skip folder_id if it's local-only (we'll implement folder sync later)
+        // For now, just send nil to avoid validation errors
+        backendNote.folderId = nil
+        
+        // Remove attachments from the initial note creation
+        // We'll upload them separately after note is created
+        backendNote.attachments = []
+        backendNote.actionItems = []
+        
+        print("📤 Sending to backend: title='\(backendNote.title)', content=\(backendNote.content.count) chars")
+        
+        return backendNote
+    }
+    
+    private func uploadAttachments(for backendNote: Note, originalAttachments: [Attachment]) async throws {
+        print("📎 Uploading \(originalAttachments.count) attachments for backend note: \(backendNote.title) (ID: \(backendNote.id))")
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let uploads = originalAttachments.compactMap { attachment -> AnyPublisher<Attachment, NetworkError>? in
+                print("📎 Preparing to upload: \(attachment.fileName)")
+                
+                // Use FilePathResolver to get the current valid path
+                guard let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL) else {
+                    print("❌ Could not resolve file path for: \(attachment.fileName)")
+                    return Fail<Attachment, NetworkError>(error: NetworkError.noData)
+                        .eraseToAnyPublisher()
+                }
+                
+                print("📎 Resolved URL: \(resolvedURL)")
+                let mimeType = mimeType(for: resolvedURL)
+                
+                return networkService.attachments.uploadAttachment(
+                    for: backendNote.id,
+                    fileURL: resolvedURL,
+                    mimeType: mimeType
+                )
+            }
+            
+            Publishers.MergeMany(uploads)
+                .collect()
+                .sink(
+                    receiveCompletion: { completion in
+                        switch completion {
+                        case .finished:
+                            print("✅ All attachments uploaded successfully")
+                            continuation.resume()
+                        case .failure(let error):
+                            print("❌ Attachment upload failed: \(error)")
+                            continuation.resume(throwing: error)
+                        }
+                    },
+                    receiveValue: { uploadedAttachments in
+                        print("✅ Uploaded \(uploadedAttachments.count) attachments")
+                    }
+                )
+                .store(in: &cancellables)
+        }
+    }
+    
+    private func mimeType(for url: URL) -> String {
+        let pathExtension = url.pathExtension.lowercased()
+        
+        switch pathExtension {
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "png":
+            return "image/png"
+        case "heic", "heif":
+            return "image/heic"
+        case "pdf":
+            return "application/pdf"
+        case "mp3":
+            return "audio/mpeg"
+        case "m4a":
+            return "audio/m4a"
+        case "wav":
+            return "audio/wav"
+        case "mp4":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        case "txt":
+            return "text/plain"
+        default:
+            return "application/octet-stream"
         }
     }
     
@@ -279,17 +474,11 @@ class NoteEditorViewModel: ObservableObject {
                 throw ImageImportError.invalidImageData
             }
             
-            // Create attachments directory if it doesn't exist
-            let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let attachmentsDir = documentsDir.appendingPathComponent("Attachments")
-            
-            if !FileManager.default.fileExists(atPath: attachmentsDir.path) {
-                try FileManager.default.createDirectory(at: attachmentsDir, withIntermediateDirectories: true)
-            }
-            
-            // Generate unique filename and save image
+            // Generate unique filename and get resistant file URL
             let fileName = "\(UUID().uuidString).jpg"
-            let imageURL = attachmentsDir.appendingPathComponent(fileName)
+            guard let imageURL = FilePathResolver.createResistantFileURL(fileName: fileName, subdirectory: "Attachments") else {
+                throw ImageImportError.directoryCreationFailed
+            }
             try imageData.write(to: imageURL)
             
             // Verify file was saved successfully

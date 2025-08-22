@@ -27,7 +27,9 @@ struct AttachmentsCard: View {
                         ImageAttachmentRow(
                             attachment: attachment,
                             onDelete: { onDelete(attachment) },
-                            onTap: { selectedImageURL = attachment.localURL }
+                            onTap: { 
+                                selectedImageURL = FilePathResolver.shared.resolveFileURL(attachment.localURL) ?? attachment.localURL
+                            }
                         )
                     } else {
                         FileAttachmentRow(
@@ -108,7 +110,8 @@ struct ImagePreviewButton: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 60, height: 60)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else if let image = UIImage(contentsOfFile: attachment.localURL.path) {
+                } else if let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL),
+                          let image = UIImage(contentsOfFile: resolvedURL.path) {
                     Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -118,7 +121,12 @@ struct ImagePreviewButton: View {
                     ImagePlaceholder()
                         .onAppear {
                             print("❌ Unable to load image from: \(attachment.localURL.path)")
-                            print("❌ File exists: \(FileManager.default.fileExists(atPath: attachment.localURL.path))")
+                            if let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL) {
+                                print("📁 Resolved path exists: \(FileManager.default.fileExists(atPath: resolvedURL.path))")
+                                print("📁 Resolved path: \(resolvedURL.path)")
+                            } else {
+                                print("❌ Could not resolve file path")
+                            }
                         }
                 }
             }
@@ -256,7 +264,8 @@ struct ImageContent: View {
     let onOffsetChange: (CGSize) -> Void
     
     var body: some View {
-        if let image = UIImage(contentsOfFile: imageURL.path) {
+        if let resolvedURL = FilePathResolver.shared.resolveFileURL(imageURL),
+           let image = UIImage(contentsOfFile: resolvedURL.path) {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)

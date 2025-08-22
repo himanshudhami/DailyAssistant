@@ -10,23 +10,58 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var securityManager = SecurityManager()
     @StateObject private var notesViewModel = NotesListViewModel()
+    @StateObject private var networkService = NetworkService.shared
     @State private var selectedTab = 0
     
     var body: some View {
         Group {
-            if securityManager.requiresAuthentication || securityManager.isAppLocked {
+            if !networkService.isAuthenticated {
+                // First: Backend authentication (login/register)
+                BackendAuthView()
+            } else if securityManager.requiresAuthentication || securityManager.isAppLocked {
+                // Second: Local biometric authentication
                 AuthenticationView(securityManager: securityManager)
             } else {
+                // Third: Main app content
                 MainTabView(selectedTab: $selectedTab)
                     .environmentObject(securityManager)
                     .environmentObject(notesViewModel)
+                    .environmentObject(networkService)
             }
         }
         .onAppear {
             if securityManager.isAppLockEnabled {
                 securityManager.requiresAuthentication = true
             }
+            
+            // Migrate attachment paths on first launch
+            Task {
+                await migrateAttachmentPathsIfNeeded()
+            }
         }
+    }
+    
+    // MARK: - Migration Helper
+    
+    private func migrateAttachmentPathsIfNeeded() async {
+        // Check if migration has already been done
+        let migrationKey = "attachmentPathMigrationComplete"
+        if UserDefaults.standard.bool(forKey: migrationKey) {
+            return
+        }
+        
+        print("🔄 Starting attachment path migration...")
+        
+        // Run migration in background
+        await Task.detached {
+            FilePathResolver.shared.migrateAttachmentPaths()
+            
+            // Mark migration as complete
+            await MainActor.run {
+                UserDefaults.standard.set(true, forKey: migrationKey)
+                print("✅ Attachment path migration complete")
+            }
+        }.value
     }
 }
 

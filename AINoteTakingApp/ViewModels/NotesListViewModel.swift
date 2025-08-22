@@ -28,6 +28,7 @@ class NotesListViewModel: ObservableObject {
     
     // MARK: - Private Properties
     private let dataManager = DataManager.shared
+    private let networkService = NetworkService.shared
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization

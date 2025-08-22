@@ -9,11 +9,41 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var securityManager: SecurityManager
+    @ObservedObject var networkService = NetworkService.shared
     @State private var showingAbout = false
+    @State private var showingLogoutConfirmation = false
     
     var body: some View {
         NavigationView {
             List {
+                // Account Section
+                if networkService.isAuthenticated {
+                    Section("Account") {
+                        if let user = networkService.currentUser {
+                            HStack {
+                                Image(systemName: "person.circle.fill")
+                                    .foregroundColor(.blue)
+                                VStack(alignment: .leading) {
+                                    Text("\(user.firstName) \(user.lastName)")
+                                        .font(.body)
+                                    Text(user.email)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        
+                        Button(action: { showingLogoutConfirmation = true }) {
+                            HStack {
+                                Image(systemName: "arrow.right.square")
+                                    .foregroundColor(.red)
+                                Text("Sign Out")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+                
                 // Security Section
                 Section("Security & Privacy") {
                     HStack {
@@ -100,6 +130,14 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
+        }
+        .alert("Sign Out", isPresented: $showingLogoutConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Sign Out", role: .destructive) {
+                networkService.logout()
+            }
+        } message: {
+            Text("Are you sure you want to sign out? You'll need to sign in again to access your notes.")
         }
     }
 }
