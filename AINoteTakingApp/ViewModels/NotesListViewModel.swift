@@ -137,30 +137,6 @@ class NotesListViewModel: ObservableObject {
         )
     }
     
-    func duplicateNote(_ note: Note) {
-        let duplicatedNote = Note(
-            title: "\(note.title) (Copy)",
-            content: note.content,
-            tags: note.tags,
-            category: note.category,
-            folderId: note.folderId,
-            aiSummary: note.aiSummary,
-            keyPoints: note.keyPoints
-        )
-        
-        let savedNote = dataManager.createNote(
-            title: duplicatedNote.title,
-            content: duplicatedNote.content,
-            folderId: duplicatedNote.folderId
-        )
-        
-        self.notes.append(savedNote)
-        self.applyFiltersAndSort(
-            searchText: self.searchText,
-            category: self.selectedCategory,
-            sortOption: self.sortOption
-        )
-    }
     
     // MARK: - Category Management
     func createCategory(name: String, color: String) {

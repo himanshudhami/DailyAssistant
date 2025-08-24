@@ -62,8 +62,6 @@ extension AIAction {
             return "Show from \(date)"
         case .deleteNote(let note):
             return "Delete '\(note.title.isEmpty ? "Untitled" : note.title)'"
-        case .duplicateNote(let note):
-            return "Duplicate '\(note.title.isEmpty ? "Untitled" : note.title)'"
         }
     }
 }

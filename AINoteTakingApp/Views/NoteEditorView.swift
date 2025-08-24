@@ -83,11 +83,11 @@ struct NoteEditorView: View {
                             .font(.subheadline)
                         }
                         
-                        Button("Save") {
+                        Button(viewModel.isSaving ? "Saving..." : "Save") {
                             saveAndDismiss()
                         }
                         .fontWeight(.semibold)
-                        .disabled(!viewModel.hasContent)
+                        .disabled(!viewModel.hasContent || viewModel.isSaving)
                     }
                 }
             }
@@ -131,8 +131,13 @@ struct NoteEditorView: View {
     
     // MARK: - Helper Methods
     private func handleVoiceRecording(url: URL?, transcript: String?) {
-        viewModel.audioURL = url
-        viewModel.transcript = transcript
+        // Handle audio as attachment (supporting multiple audio files)
+        if let audioURL = url {
+            Task {
+                await viewModel.handleAudioRecording(audioURL: audioURL, transcript: transcript)
+            }
+        }
+        // Note: We no longer use viewModel.audioURL (legacy field)
     }
     
     private func saveAndDismiss() {

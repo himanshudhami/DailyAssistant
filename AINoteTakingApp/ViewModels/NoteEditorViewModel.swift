@@ -58,8 +58,7 @@ class NoteEditorViewModel: ObservableObject {
     var hasContent: Bool {
         return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-               audioURL != nil ||
-               !attachments.isEmpty
+               !attachments.isEmpty // This now includes audio files too
     }
     
     var hasChanges: Bool {
@@ -70,15 +69,15 @@ class NoteEditorViewModel: ObservableObject {
                tags != originalNote.tags ||
                selectedCategory?.id != originalNote.category?.id ||
                attachments.count != originalNote.attachments.count ||
-               audioURL != originalNote.audioURL ||
                transcript != originalNote.transcript ||
                ocrText != originalNote.ocrText ||
                latitude != originalNote.latitude ||
                longitude != originalNote.longitude
+        // Note: Removed audioURL check since we now use attachments for all files
     }
     
     // MARK: - Private Properties
-    private let originalNote: Note?
+    private var originalNote: Note? // Made mutable to update after first save
     private let currentFolder: Folder?
     private let dataManager = DataManager.shared
     private let networkService = NetworkService.shared
@@ -96,6 +95,12 @@ class NoteEditorViewModel: ObservableObject {
         }
         
         setupAutoSave()
+    }
+    
+    deinit {
+        // Clean up all subscriptions to prevent memory leaks
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
     }
     
     private func loadNoteData(_ note: Note) {
@@ -121,48 +126,59 @@ class NoteEditorViewModel: ObservableObject {
     
     // MARK: - Save Operations
     func saveNote() async {
-        guard hasContent else { return }
+        guard hasContent && !isSaving else { return }
         
-        await MainActor.run {
-            self.isSaving = true
-            self.errorMessage = nil
-        }
+        isSaving = true
+        errorMessage = nil
         
         let noteToSave = createNoteFromCurrentData()
+        
+        print("💾 Starting save for note: \(noteToSave.title) (Local ID: \(noteToSave.id))")
+        print("💾 Is existing note: \(originalNote != nil)")
         
         do {
             // Save locally first (immediate save)
             if originalNote != nil {
                 // Update existing note
                 dataManager.updateNote(noteToSave)
+                print("💾 Updated local note")
             } else {
                 // Create new note
                 let _ = dataManager.createNoteFromData(noteToSave)
+                print("💾 Created new local note")
             }
             
             // Save to backend (only if authenticated)
             var backendNote: Note? = nil
             if networkService.isAuthenticated {
+                print("💾 Starting backend save...")
                 backendNote = try await saveToBackend(noteToSave)
                 
                 // Upload attachments after note is created/updated using backend note ID
                 if !noteToSave.attachments.isEmpty, let backendNote = backendNote {
                     try await uploadAttachments(for: backendNote, originalAttachments: noteToSave.attachments)
                 }
+                
+                // Update local note with backend info and mark as synced
+                if let backendNote = backendNote {
+                    await updateLocalNoteWithBackendInfo(backendNote)
+                }
             }
             
-            await MainActor.run {
-                self.isSaving = false
-                print("✅ Note saved successfully - Local: ✓ Backend: \(networkService.isAuthenticated ? "✓" : "⚠️ Offline")")
+            // Update originalNote after first successful save to prevent treating subsequent saves as new notes
+            if originalNote == nil {
+                originalNote = noteToSave
+                print("📝 Set originalNote after first save: \(noteToSave.id)")
             }
+            
+            print("✅ Note saved successfully - Local: ✓ Backend: \(networkService.isAuthenticated ? "✓" : "⚠️ Offline")")
             
         } catch {
-            await MainActor.run {
-                self.isSaving = false
-                self.errorMessage = "Failed to save note: \(error.localizedDescription)"
-                print("❌ Note save failed: \(error)")
-            }
+            errorMessage = "Failed to save note: \(error.localizedDescription)"
+            print("❌ Note save failed: \(error)")
         }
+        
+        isSaving = false
     }
     
     private func saveToBackend(_ note: Note) async throws -> Note {
@@ -171,12 +187,22 @@ class NoteEditorViewModel: ObservableObject {
             // Prepare note for backend (handle local-only data)
             let backendNote = prepareNoteForBackend(note)
             
-            // Check if this note exists on backend or is local-only
-            if originalNote != nil && isNoteSyncedToBackend(note) {
+            // For existing notes, check if already synced. For new notes, always create.
+            let noteToCheck = originalNote ?? note
+            let isExistingNote = originalNote != nil
+            let isAlreadySynced = isNoteSyncedToBackend(noteToCheck)
+            
+            print("📊 Save decision: isExisting=\(isExistingNote), isAlreadySynced=\(isAlreadySynced)")
+            
+            // Create a single-use cancellable for this operation
+            var saveCancellable: AnyCancellable?
+            
+            if isExistingNote && isAlreadySynced {
                 // Update existing note that exists on backend
-                print("🔄 Updating existing backend note: \(backendNote.title)")
-                networkService.notes.updateNote(
-                    backendNote.id,
+                let backendId = getBackendNoteId(noteToCheck)
+                print("🔄 Updating existing backend note: \(backendNote.title) (Backend ID: \(backendId))")
+                saveCancellable = networkService.notes.updateNote(
+                    backendId,
                     title: backendNote.title,
                     content: backendNote.content,
                     tags: backendNote.tags,
@@ -193,13 +219,16 @@ class NoteEditorViewModel: ObservableObject {
                             // If update fails, try creating as new note (fallback for local-only notes)
                             self.createNoteOnBackend(backendNote, continuation: continuation)
                         }
+                        saveCancellable = nil // Clean up reference
                     },
                     receiveValue: { updatedNote in
                         print("✅ Note updated on backend: \(updatedNote.title) (ID: \(updatedNote.id))")
+                        // Mark as synced immediately after successful update
+                        self.markNoteAsSynced(noteToCheck)
                         continuation.resume(returning: updatedNote)
+                        saveCancellable = nil // Clean up reference
                     }
                 )
-                .store(in: &cancellables)
             } else {
                 // Create new note (either truly new or local-only existing note)
                 print("➕ Creating new note on backend: \(backendNote.title)")
@@ -209,7 +238,9 @@ class NoteEditorViewModel: ObservableObject {
     }
     
     private func createNoteOnBackend(_ note: Note, continuation: CheckedContinuation<Note, Error>) {
-        networkService.notes.createNote(note)
+        // Create a single-use cancellable for this operation
+        var createCancellable: AnyCancellable?
+        createCancellable = networkService.notes.createNote(note)
             .sink(
                 receiveCompletion: { completion in
                     switch completion {
@@ -219,26 +250,75 @@ class NoteEditorViewModel: ObservableObject {
                         print("❌ Backend creation error: \(error)")
                         continuation.resume(throwing: error)
                     }
+                    createCancellable = nil // Clean up reference
                 },
                 receiveValue: { createdNote in
                     print("✅ Note created on backend: \(createdNote.title) (ID: \(createdNote.id))")
                     // Mark this note as synced for future reference
                     self.markNoteAsSynced(createdNote)
                     continuation.resume(returning: createdNote)
+                    createCancellable = nil // Clean up reference
                 }
             )
-            .store(in: &cancellables)
     }
     
     private func isNoteSyncedToBackend(_ note: Note) -> Bool {
         // Check if this note has been synced to backend before
-        let key = "synced_note_\(note.id)"
-        return UserDefaults.standard.bool(forKey: key)
+        let syncKey = "synced_note_\(note.id)"
+        let hasSyncFlag = UserDefaults.standard.bool(forKey: syncKey)
+        
+        // Also check if we have a backend ID mapping for this note
+        let mappingKey = "backend_id_\(note.id)"
+        let hasMapping = UserDefaults.standard.string(forKey: mappingKey) != nil
+        
+        let isSynced = hasSyncFlag || hasMapping
+        print("🔍 Sync check for note \(note.id): syncFlag=\(hasSyncFlag), hasMapping=\(hasMapping), result=\(isSynced)")
+        
+        return isSynced
     }
     
     private func markNoteAsSynced(_ note: Note) {
         let key = "synced_note_\(note.id)"
         UserDefaults.standard.set(true, forKey: key)
+    }
+    
+    private func getBackendNoteId(_ localNote: Note) -> UUID {
+        // First check if we have a stored mapping for this local note
+        let mappingKey = "backend_id_\(localNote.id)"
+        if let backendIdString = UserDefaults.standard.string(forKey: mappingKey),
+           let backendId = UUID(uuidString: backendIdString) {
+            return backendId
+        }
+        
+        // If no mapping exists, use the local ID (for notes that were updated directly)
+        return localNote.id
+    }
+    
+    private func updateLocalNoteWithBackendInfo(_ backendNote: Note) async {
+        await MainActor.run {
+            // If this was a new note creation, the backend note will have a different ID
+            // We need to track this mapping for future updates
+            if let originalNote = self.originalNote {
+                // This was an update - mark the original note as synced
+                self.markNoteAsSynced(originalNote)
+            } else {
+                // This was a new note creation - the backend assigned a new ID
+                print("📝 New note created: Local ID \(self.createNoteFromCurrentData().id) → Backend ID \(backendNote.id)")
+                
+                // Store the mapping between local ID and backend ID for future reference
+                let localNoteId = self.createNoteFromCurrentData().id
+                let backendId = backendNote.id
+                
+                // Mark as synced using backend ID
+                self.markNoteAsSynced(backendNote)
+                
+                // Also store mapping for future updates
+                let mappingKey = "backend_id_\(localNoteId)"
+                UserDefaults.standard.set(backendId.uuidString, forKey: mappingKey)
+                
+                print("✅ Note sync mapping stored: \(localNoteId) → \(backendId)")
+            }
+        }
     }
     
     private func prepareNoteForBackend(_ note: Note) -> Note {
@@ -257,6 +337,9 @@ class NoteEditorViewModel: ObservableObject {
         // We'll upload them separately after note is created
         backendNote.attachments = []
         backendNote.actionItems = []
+        
+        // Don't send legacy audioURL field (use attachments instead)
+        backendNote.audioURL = nil
         
         print("📤 Sending to backend: title='\(backendNote.title)', content=\(backendNote.content.count) chars")
         
@@ -287,7 +370,9 @@ class NoteEditorViewModel: ObservableObject {
                 )
             }
             
-            Publishers.MergeMany(uploads)
+            // Create a single-use cancellable for this upload operation
+            var uploadCancellable: AnyCancellable?
+            uploadCancellable = Publishers.MergeMany(uploads)
                 .collect()
                 .sink(
                     receiveCompletion: { completion in
@@ -299,12 +384,62 @@ class NoteEditorViewModel: ObservableObject {
                             print("❌ Attachment upload failed: \(error)")
                             continuation.resume(throwing: error)
                         }
+                        uploadCancellable = nil // Clean up reference
                     },
                     receiveValue: { uploadedAttachments in
                         print("✅ Uploaded \(uploadedAttachments.count) attachments")
                     }
                 )
-                .store(in: &cancellables)
+        }
+    }
+    
+    // MARK: - Audio Recording Handler
+    
+    func handleAudioRecording(audioURL: URL, transcript: String?) async {
+        isProcessing = true
+        
+        do {
+            // Get file info
+            let fileSize = try audioURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            let fileName = audioURL.lastPathComponent
+            let fileExtension = audioURL.pathExtension
+            
+            print("🎵 Processing audio recording: \(fileName) (\(fileSize) bytes)")
+            
+            // Create audio attachment
+            let audioAttachment = Attachment(
+                fileName: fileName,
+                fileExtension: fileExtension,
+                mimeType: mimeType(for: audioURL),
+                fileSize: Int64(fileSize),
+                localURL: audioURL,
+                thumbnailData: nil,
+                type: .audio
+            )
+            
+            await MainActor.run {
+                // Add to attachments (supporting multiple audio files)
+                self.attachments.append(audioAttachment)
+                
+                // Set transcript if provided
+                if let transcript = transcript, !transcript.isEmpty {
+                    if let existingTranscript = self.transcript, !existingTranscript.isEmpty {
+                        self.transcript = existingTranscript + "\n\n--- Audio transcription ---\n" + transcript
+                    } else {
+                        self.transcript = "--- Audio transcription ---\n" + transcript
+                    }
+                }
+                
+                self.isProcessing = false
+                print("✅ Audio attachment added: \(fileName)")
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.isProcessing = false
+                self.errorMessage = "Failed to process audio recording: \(error.localizedDescription)"
+                print("❌ Audio processing failed: \(error)")
+            }
         }
     }
     
@@ -357,8 +492,8 @@ class NoteEditorViewModel: ObservableObject {
             id: noteId,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             content: content.trimmingCharacters(in: .whitespacesAndNewlines),
-            audioURL: audioURL,
-            attachments: attachments,
+            audioURL: nil, // Legacy field - now audio files are in attachments array
+            attachments: attachments, // This now includes both images AND audio files
             tags: tags,
             category: selectedCategory,
             folderId: originalNote?.folderId ?? currentFolder?.id,

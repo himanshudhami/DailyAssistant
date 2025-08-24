@@ -32,22 +32,53 @@ class NetworkClient: NetworkClientProtocol {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let configuration = AppConfiguration.shared
     
     var authToken: String? {
         get { UserDefaults.standard.string(forKey: "authToken") }
         set { UserDefaults.standard.set(newValue, forKey: "authToken") }
     }
     
-    init(baseURL: String = "http://192.168.86.26:8080/api/v1",
-         session: URLSession = .shared) {
-        self.baseURL = baseURL
-        self.session = session
+    init(baseURL: String? = nil, session: URLSession? = nil) {
+        // Use provided baseURL or fall back to configuration
+        self.baseURL = baseURL ?? AppConfiguration.shared.apiBaseURL
+        
+        // Validate the URL on initialization
+        if !AppConfiguration.shared.validateAPIURL() {
+            print("⚠️ Warning: API URL configuration may be invalid")
+        }
+        
+        // Configure URLSession with timeout
+        if let customSession = session {
+            self.session = customSession
+        } else {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = AppConfiguration.shared.apiTimeout
+            config.timeoutIntervalForResource = AppConfiguration.shared.apiTimeout * 2
+            
+            // Add security headers
+            config.httpAdditionalHeaders = [
+                "User-Agent": "AINoteTakingApp/1.0",
+                "Accept": "application/json"
+            ]
+            
+            self.session = URLSession(configuration: config)
+        }
+        
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
         
         // Configure decoder for ISO8601 dates
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
+        
+        // Print configuration in debug mode
+        #if DEBUG
+        print("🔧 NetworkClient initialized")
+        print("   Base URL: \(self.baseURL)")
+        print("   Require HTTPS: \(configuration.requireHTTPS)")
+        configuration.printConfiguration()
+        #endif
     }
     
     // MARK: - Request with Response
@@ -59,6 +90,18 @@ class NetworkClient: NetworkClientProtocol {
     ) -> AnyPublisher<T, NetworkError> {
         
         guard let url = URL(string: baseURL + endpoint) else {
+            return Fail(error: NetworkError.invalidURL)
+                .eraseToAnyPublisher()
+        }
+        
+        // Enforce HTTPS if required
+        if configuration.requireHTTPS && url.scheme != "https" {
+            print("❌ HTTPS required but attempting to use \(url.scheme ?? "unknown")")
+            print("   URL: \(url.absoluteString)")
+            print("   Environment: \(AppEnvironment.current.rawValue)")
+            print("   To allow HTTP for local development:")
+            print("   - Your URL should contain 'localhost', '127.0.0.1', '192.168.', or '10.0.'")
+            print("   - Or set ALLOW_HTTP=true in environment variables")
             return Fail(error: NetworkError.invalidURL)
                 .eraseToAnyPublisher()
         }

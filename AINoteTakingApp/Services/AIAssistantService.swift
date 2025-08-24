@@ -27,7 +27,6 @@ enum AIAction {
     case showRecentNotes
     case showNotesByDate(String)
     case deleteNote(Note)
-    case duplicateNote(Note)
 }
 
 // MARK: - AI Context Types
@@ -127,8 +126,6 @@ class AIAssistantService: ObservableObject {
             return await handleDateSearchRequest("show notes from \(date)", notes: availableNotes)
         case .deleteNote(let note):
             return ("I can help you identify the note to delete, but you'll need to delete it from the main logs view for safety.", [.openNote(note)], [note])
-        case .duplicateNote(let note):
-            return ("I found the note you want to duplicate. You can open it and copy its content.", [.openNote(note)], [note])
         }
     }
     
