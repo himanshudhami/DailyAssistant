@@ -29,14 +29,8 @@ struct RelatedNotesResult {
     let similarity: Double
 }
 
-// MARK: - ML Results
-struct ExtractedEntities {
-    let people: [String]
-    let places: [String]
-    let organizations: [String]
-    let actionVerbs: [String]
-    let importantNouns: [String]
-}
+// MARK: - ML Results  
+// Note: ExtractedEntities moved to StructuredTextModels.swift
 
 struct MLSentimentResult {
     let sentiment: String
@@ -86,28 +80,43 @@ class AIProcessor: ObservableObject {
             }
         }
         
-        // Step 1: Generate summary
+        // Step 1: Check if this looks like structured content (business card, etc.)
+        await updateProgress(0.1)
+        let structuredExtractor = StructuredTextExtractor()
+        let quickStructuredData = await structuredExtractor.extractStructuredData(
+            from: text,
+            textBlocks: [],
+            image: nil,
+            options: .businessCard // Quick check for business cards
+        )
+        
+        // If we detected structured content, use the enhanced processing
+        if structuredContentDetected(structuredData: quickStructuredData) {
+            print("🎯 Structured content detected - using enhanced processing")
+            return await processStructuredContent(quickStructuredData, originalText: text)
+        }
+        
+        // Otherwise, use traditional processing
+        print("📄 Using traditional text processing")
+        
+        // Step 2: Generate summary (improved with structure awareness)
         await updateProgress(0.2)
         let summary = await summarizeContent(text)
         
-        // Step 2: Extract key points
+        // Step 3: Extract key points (improved)
         await updateProgress(0.4)
         let rawKeyPoints = await extractKeyPoints(text)
         
-        // Step 3: Remove duplicate content between summary and key points
+        // Step 4: Remove duplicate content between summary and key points
         let keyPoints = removeDuplicateContent(summary: summary, keyPoints: rawKeyPoints)
         
-        // Step 4: Extract action items
+        // Step 5: Extract action items (improved)
         await updateProgress(0.6)
         let actionItems = await extractActionItems(text)
         
-        // Step 5: Suggest tags
+        // Step 6: Suggest tags (improved)
         await updateProgress(0.8)
         let suggestedTags = await suggestTags(text)
-        
-        // Step 6: Categorize content
-        await updateProgress(0.9)
-        let suggestedCategory = await categorizeContent(text)
         
         // Step 7: Analyze sentiment with confidence
         await updateProgress(1.0)
@@ -123,6 +132,64 @@ class AIProcessor: ObservableObject {
             sentiment: sentimentResult.sentiment,
             sentimentConfidence: sentimentResult.confidence,
             categoryConfidence: categoryResult.confidence
+        )
+    }
+    
+    private func structuredContentDetected(structuredData: StructuredTextData) -> Bool {
+        // Check if we found meaningful structured content
+        return structuredData.businessCard != nil || 
+               structuredData.contactInfo?.phoneNumbers.isEmpty == false ||
+               structuredData.contactInfo?.emailAddresses.isEmpty == false ||
+               structuredData.documentType != .generic
+    }
+    
+    // MARK: - Enhanced Processing with Structured Data
+    func processStructuredContent(_ structuredData: StructuredTextData, originalText: String) async -> ProcessedContent {
+        isProcessing = true
+        processingProgress = 0
+        
+        defer {
+            Task { @MainActor in
+                isProcessing = false
+                processingProgress = 0
+            }
+        }
+        
+        let structuredExtractor = StructuredTextExtractor()
+        
+        // Step 1: Generate intelligent summary based on document type
+        await updateProgress(0.2)
+        let summary = structuredExtractor.generateSmartSummary(from: structuredData, originalText: originalText)
+        
+        // Step 2: Extract structured key points
+        await updateProgress(0.4)
+        let keyPoints = await extractStructuredKeyPoints(structuredData, originalText: originalText)
+        
+        // Step 3: Generate smart action items
+        await updateProgress(0.6)
+        let actionItems = structuredExtractor.generateActionableItems(from: structuredData)
+        
+        // Step 4: Generate smart tags
+        await updateProgress(0.8)
+        let suggestedTags = structuredExtractor.generateSmartTags(from: structuredData)
+        
+        // Step 5: Use document type for category
+        await updateProgress(0.9)
+        let suggestedCategory = createCategoryFromDocumentType(structuredData.documentType)
+        
+        // Step 6: Analyze sentiment
+        await updateProgress(1.0)
+        let sentimentResult = await analyzeSentimentWithConfidence(originalText)
+        
+        return ProcessedContent(
+            summary: summary,
+            keyPoints: keyPoints,
+            actionItems: actionItems,
+            suggestedTags: suggestedTags,
+            suggestedCategory: suggestedCategory,
+            sentiment: sentimentResult.sentiment,
+            sentimentConfidence: sentimentResult.confidence,
+            categoryConfidence: Double(structuredData.processingConfidence)
         )
     }
     
@@ -199,9 +266,8 @@ class AIProcessor: ObservableObject {
         tags.formUnion(entities.places.map { $0.lowercased() })
         tags.formUnion(entities.organizations.map { $0.lowercased() })
 
-        // Add important nouns and action verbs
-        tags.formUnion(entities.importantNouns)
-        tags.formUnion(entities.actionVerbs)
+        // Add products (important nouns equivalent)
+        tags.formUnion(entities.products)
 
         // Add semantic keywords using traditional method as fallback
         let keywords = extractKeywords(from: content)
@@ -213,6 +279,95 @@ class AIProcessor: ObservableObject {
     func categorizeContent(_ text: String) async -> Category? {
         let result = await coreMLProcessor.classifyCategory(text)
         return createCategory(from: result.category)
+    }
+    
+    // MARK: - Structured Data Processing Helpers
+    private func extractStructuredKeyPoints(_ structuredData: StructuredTextData, originalText: String) async -> [String] {
+        var keyPoints: [String] = []
+        
+        switch structuredData.documentType {
+        case .businessCard:
+            if let businessCard = structuredData.businessCard {
+                if let name = businessCard.name {
+                    keyPoints.append("Contact: \(name.fullName)")
+                }
+                if let company = businessCard.company {
+                    keyPoints.append("Company: \(company)")
+                }
+                if !businessCard.contactInfo.phoneNumbers.isEmpty {
+                    keyPoints.append("Phone available")
+                }
+                if !businessCard.contactInfo.emailAddresses.isEmpty {
+                    keyPoints.append("Email available")
+                }
+            }
+            
+        case .notice:
+            if let layout = structuredData.documentLayout {
+                if !layout.sections.isEmpty {
+                    keyPoints.append(contentsOf: layout.sections.prefix(3).map { "• \($0.title)" })
+                }
+                if !layout.bulletPoints.isEmpty {
+                    keyPoints.append(contentsOf: layout.bulletPoints.prefix(3).map { "• \($0.text)" })
+                }
+            }
+            if let contactInfo = structuredData.contactInfo {
+                if !contactInfo.phoneNumbers.isEmpty {
+                    keyPoints.append("Contact information provided")
+                }
+            }
+            
+        case .form:
+            keyPoints.append("Form requires completion")
+            if let layout = structuredData.documentLayout {
+                keyPoints.append("Contains \(layout.sections.count) sections")
+            }
+            
+        case .receipt:
+            if let entities = structuredData.extractedEntities {
+                if !entities.currencies.isEmpty {
+                    let amounts = entities.currencies.compactMap { $0.amount }
+                    if let total = amounts.max() {
+                        keyPoints.append("Total amount: \(total)")
+                    }
+                }
+                if !entities.dates.isEmpty {
+                    keyPoints.append("Transaction date recorded")
+                }
+            }
+            
+        default:
+            // Fallback to traditional extraction
+            keyPoints = await extractKeyPoints(originalText)
+        }
+        
+        // Ensure we have at least some key points
+        if keyPoints.isEmpty {
+            keyPoints = await extractKeyPoints(originalText)
+        }
+        
+        return Array(keyPoints.prefix(AIConfig.maxKeyPoints))
+    }
+    
+    private func createCategoryFromDocumentType(_ documentType: DocumentType) -> Category {
+        switch documentType {
+        case .businessCard:
+            return Category(name: "Contacts", color: "#34C759")
+        case .notice:
+            return Category(name: "Announcements", color: "#FF9500")
+        case .form:
+            return Category(name: "Forms", color: "#007AFF")
+        case .receipt:
+            return Category(name: "Receipts", color: "#FF3B30")
+        case .letter:
+            return Category(name: "Correspondence", color: "#AF52DE")
+        case .flyer:
+            return Category(name: "Events", color: "#FF2D92")
+        case .menu:
+            return Category(name: "Menus", color: "#32ADE6")
+        case .generic:
+            return Category(name: "Documents", color: "#8E8E93")
+        }
     }
 
     func categorizeContentWithConfidence(_ text: String) async -> (category: Category?, confidence: Double) {
@@ -702,7 +857,7 @@ class MLEntityExtractor {
 
     func extractEntitiesWithML(_ text: String) async -> ExtractedEntities {
         guard !text.isEmpty else {
-            return ExtractedEntities(people: [], places: [], organizations: [], actionVerbs: [], importantNouns: [])
+            return ExtractedEntities(people: [], places: [], organizations: [], dates: [], currencies: [], products: [], confidence: 0.0)
         }
 
         tagger.string = text
@@ -761,12 +916,17 @@ class MLEntityExtractor {
             return true
         }
 
+        // Convert to new ExtractedEntities format
+        let confidence = calculateEntityConfidence(people: people, places: places, organizations: organizations)
+        
         return ExtractedEntities(
             people: people,
             places: places,
             organizations: organizations,
-            actionVerbs: Array(actionVerbs.prefix(10)), // Limit to most relevant
-            importantNouns: Array(importantNouns.prefix(15)) // Limit to most relevant
+            dates: [], // Dates will be extracted by ContactInfoExtractor
+            currencies: [], // Currencies will be extracted by StructuredTextExtractor
+            products: Array(importantNouns.prefix(10)), // Use important nouns as products
+            confidence: confidence
         )
     }
 
@@ -815,5 +975,17 @@ class MLEntityExtractor {
         ]
 
         return importantNouns.contains(word)
+    }
+    
+    private func calculateEntityConfidence(people: [String], places: [String], organizations: [String]) -> Float {
+        let totalEntities = people.count + places.count + organizations.count
+        
+        if totalEntities == 0 {
+            return 0.3 // Low confidence when no entities found
+        } else if totalEntities >= 5 {
+            return 0.9 // High confidence with many entities
+        } else {
+            return 0.5 + Float(totalEntities) * 0.1 // Scale with entity count
+        }
     }
 }

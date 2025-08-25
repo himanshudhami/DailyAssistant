@@ -2,27 +2,17 @@
 //  OCRService.swift
 //  AINoteTakingApp
 //
-//  Optical Character Recognition service following SRP
-//  Extracted from AIProcessor for better separation of concerns
-//
-//  Created by AI Assistant on 2025-01-29.
+//  Complete OCR service with all functionality consolidated
 //
 
 import Foundation
 import Vision
 import UIKit
-import CoreImage
-import CoreImage.CIFilterBuiltins
+import CoreGraphics
 
-// MARK: - OCR Result Models
-struct OCRResult {
-    let rawText: String
-    let detectedTables: [TableData]
-    let confidence: Float
-    let preprocessedImage: UIImage?
-}
+// MARK: - Supporting Types
 
-// MARK: - Image Preprocessing Options
+/// Options for image preprocessing
 struct ImagePreprocessingOptions {
     let enhanceContrast: Bool
     let correctRotation: Bool
@@ -30,23 +20,33 @@ struct ImagePreprocessingOptions {
     let sharpenText: Bool
     let normalizeColors: Bool
     
-    static let `default` = ImagePreprocessingOptions(
-        enhanceContrast: true,
-        correctRotation: true,
-        denoiseImage: true,
-        sharpenText: true,
-        normalizeColors: true
-    )
+    init(enhanceContrast: Bool = false, 
+         correctRotation: Bool = false, 
+         denoiseImage: Bool = false, 
+         sharpenText: Bool = false, 
+         normalizeColors: Bool = false) {
+        self.enhanceContrast = enhanceContrast
+        self.correctRotation = correctRotation
+        self.denoiseImage = denoiseImage
+        self.sharpenText = sharpenText
+        self.normalizeColors = normalizeColors
+    }
     
-    static let minimal = ImagePreprocessingOptions(
-        enhanceContrast: true,
-        correctRotation: false,
-        denoiseImage: false,
-        sharpenText: false,
-        normalizeColors: false
-    )
+    static let `default` = ImagePreprocessingOptions()
+    static let minimal = ImagePreprocessingOptions(enhanceContrast: true)
 }
 
+/// OCR processing result
+struct OCRResult {
+    let rawText: String
+    let detectedTables: [TableData]
+    let confidence: Float
+    let preprocessedImage: UIImage
+    let structuredData: StructuredTextData?
+    let documentType: DocumentType
+}
+
+/// Table data structure
 struct TableData {
     let title: String?
     let headers: [String]
@@ -54,44 +54,12 @@ struct TableData {
     let boundingBox: CGRect
     let confidence: Float
     
-    enum OutputFormat {
-        case markdown
-        case csv
-        case json
-        case plainText
-    }
-    
-    var formattedText: String {
-        return formatAs(.markdown)
-    }
-    
-    func formatAs(_ format: OutputFormat) -> String {
-        switch format {
-        case .markdown:
-            return formatAsMarkdown()
-        case .csv:
-            return formatAsCSV()
-        case .json:
-            return formatAsJSON()
-        case .plainText:
-            return formatAsPlainText()
-        }
-    }
-    
     var isValid: Bool {
         return !headers.isEmpty && !rows.isEmpty && confidence > 0.3
     }
-    
-    var rowCount: Int {
-        return rows.count
-    }
-    
-    var columnCount: Int {
-        return headers.count
-    }
 }
 
-// MARK: - OCR Service
+// MARK: - Main OCR Service
 @MainActor
 class OCRService: ObservableObject {
     
@@ -100,12 +68,25 @@ class OCRService: ObservableObject {
     @Published var processingProgress: Double = 0
     @Published var errorMessage: String?
     
-    // MARK: - Private Properties
-    private let context = CIContext()
+    // MARK: - Dependencies
+    private let imagePreprocessor = ImagePreprocessor()
+    private let tableDetector = TableDetector()
     
     // MARK: - Public Methods
     
+    /// Performs OCR on an image with default options
     func performOCR(on image: UIImage, options: ImagePreprocessingOptions = .default) async -> OCRResult {
+        return await performOCR(on: image, options: options, isBusinessCard: false)
+    }
+    
+    /// Performs specialized business card OCR
+    func performBusinessCardOCR(on image: UIImage, options: ImagePreprocessingOptions = .default) async -> OCRResult {
+        return await performOCR(on: image, options: options, isBusinessCard: true)
+    }
+    
+    // MARK: - Private Implementation
+    
+    private func performOCR(on image: UIImage, options: ImagePreprocessingOptions = .default, isBusinessCard: Bool = false) async -> OCRResult {
         isProcessing = true
         processingProgress = 0
         
@@ -118,10 +99,11 @@ class OCRService: ObservableObject {
         
         // Preprocess image for better OCR accuracy
         await MainActor.run { processingProgress = 0.1 }
-        let preprocessedImage = await preprocessImage(image, options: options)
+        let enhancedOptions = isBusinessCard ? imagePreprocessor.enhanceOptionsForBusinessCard(options) : options
+        let preprocessedImage = await imagePreprocessor.preprocessImage(image, options: enhancedOptions)
         
         guard let cgImage = preprocessedImage.cgImage else {
-            return OCRResult(rawText: "", detectedTables: [], confidence: 0.0, preprocessedImage: preprocessedImage)
+            return OCRResult(rawText: "", detectedTables: [], confidence: 0.0, preprocessedImage: preprocessedImage, structuredData: nil, documentType: .generic)
         }
         
         return await withCheckedContinuation { continuation in
@@ -131,12 +113,12 @@ class OCRService: ObservableObject {
                 }
                 
                 guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(returning: OCRResult(rawText: "", detectedTables: [], confidence: 0.0, preprocessedImage: preprocessedImage))
+                    continuation.resume(returning: OCRResult(rawText: "", detectedTables: [], confidence: 0.0, preprocessedImage: preprocessedImage, structuredData: nil, documentType: .generic))
                     return
                 }
                 
                 Task {
-                    let result = await self.processOCRObservations(observations, imageSize: preprocessedImage.size, preprocessedImage: preprocessedImage)
+                    let result = await self.processOCRObservations(observations, imageSize: preprocessedImage.size, preprocessedImage: preprocessedImage, isBusinessCard: isBusinessCard)
                     await MainActor.run {
                         self.processingProgress = 1.0
                     }
@@ -146,44 +128,23 @@ class OCRService: ObservableObject {
             
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
+            request.automaticallyDetectsLanguage = true
+            
+            // Optimize for business cards and documents
+            if #available(iOS 16.0, *) {
+                request.revision = VNRecognizeTextRequestRevision3
+            }
+            
+            // Configure for better text detection
+            request.minimumTextHeight = 0.01  // Detect smaller text
+            request.recognitionLanguages = ["en-US", "en"]
             
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             try? handler.perform([request])
         }
     }
     
-    func validateAndCorrectTable(_ table: TableData) -> TableData {
-        var correctedHeaders = validateHeaders(table.headers)
-        var correctedRows = validateRows(table.rows, expectedColumnCount: correctedHeaders.count)
-        
-        // Clean and normalize text
-        correctedHeaders = correctedHeaders.map { cleanText($0) }
-        correctedRows = correctedRows.map { row in
-            row.map { cleanText($0) }
-        }
-        
-        // Remove completely empty rows
-        correctedRows = correctedRows.filter { row in
-            !row.allSatisfy { $0.isEmpty }
-        }
-        
-        // Merge split cells if detected
-        correctedRows = mergeSplitCells(correctedRows)
-        
-        return TableData(
-            title: table.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-            headers: correctedHeaders,
-            rows: correctedRows,
-            boundingBox: table.boundingBox,
-            confidence: calculateCorrectedConfidence(originalConfidence: table.confidence, headers: correctedHeaders, rows: correctedRows)
-        )
-    }
-}
-
-// MARK: - Private Methods
-private extension OCRService {
-    
-    func processOCRObservations(_ observations: [VNRecognizedTextObservation], imageSize: CGSize, preprocessedImage: UIImage) async -> OCRResult {
+    private func processOCRObservations(_ observations: [VNRecognizedTextObservation], imageSize: CGSize, preprocessedImage: UIImage, isBusinessCard: Bool = false) async -> OCRResult {
         var rawText = ""
         var textBlocks: [(text: String, boundingBox: CGRect, confidence: Float)] = []
         
@@ -200,574 +161,33 @@ private extension OCRService {
         }
         
         // Detect tables from text blocks
-        let detectedTables = await detectTables(from: textBlocks, imageSize: imageSize)
+        let detectedTables = await tableDetector.detectTables(from: textBlocks, imageSize: imageSize)
         
         let averageConfidence = textBlocks.isEmpty ? 0.0 : textBlocks.map { $0.confidence }.reduce(0, +) / Float(textBlocks.count)
+        
+        // Extract structured data using the new services
+        let structuredExtractor = StructuredTextExtractor()
+        
+        // Use business card optimization if detected or requested
+        var extractionOptions = StructuredExtractionOptions.comprehensive
+        if isBusinessCard {
+            extractionOptions = .businessCard
+        }
+        
+        let structuredData = await structuredExtractor.extractStructuredData(
+            from: rawText,
+            textBlocks: textBlocks,
+            image: preprocessedImage,
+            options: extractionOptions
+        )
         
         return OCRResult(
             rawText: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
             detectedTables: detectedTables,
             confidence: averageConfidence,
-            preprocessedImage: preprocessedImage
+            preprocessedImage: preprocessedImage,
+            structuredData: structuredData,
+            documentType: structuredData.documentType
         )
-    }
-    
-    func detectTables(from textBlocks: [(text: String, boundingBox: CGRect, confidence: Float)], imageSize: CGSize) async -> [TableData] {
-        var tables: [TableData] = []
-        
-        // Group text blocks by vertical position to identify potential rows
-        let sortedBlocks = textBlocks.sorted { $0.boundingBox.minY > $1.boundingBox.minY }
-        var processedBlocks = Set<Int>()
-        
-        for (index, block) in sortedBlocks.enumerated() {
-            if processedBlocks.contains(index) { continue }
-            
-            // Find blocks that could form a table row (similar Y position)
-            var rowBlocks: [(text: String, boundingBox: CGRect, confidence: Float)] = [block]
-            let rowY = block.boundingBox.minY
-            let rowTolerance: CGFloat = 0.02 // 2% tolerance
-            
-            for (otherIndex, otherBlock) in sortedBlocks.enumerated() {
-                if otherIndex == index || processedBlocks.contains(otherIndex) { continue }
-                
-                if abs(otherBlock.boundingBox.minY - rowY) <= rowTolerance {
-                    rowBlocks.append(otherBlock)
-                    processedBlocks.insert(otherIndex)
-                }
-            }
-            
-            // If we found multiple blocks in a row, check if it could be part of a table
-            if rowBlocks.count >= 2 {
-                processedBlocks.insert(index)
-                
-                // Sort blocks by X position for proper column order
-                rowBlocks.sort { $0.boundingBox.minX < $1.boundingBox.minX }
-                
-                // Look for additional rows below this one
-                var tableRows: [[String]] = [rowBlocks.map { $0.text }]
-                var tableBoundingBox = rowBlocks.reduce(rowBlocks[0].boundingBox) { result, block in
-                    result.union(block.boundingBox)
-                }
-                
-                // Search for additional rows
-                let columnCount = rowBlocks.count
-                let columnPositions = rowBlocks.map { $0.boundingBox.minX }
-                
-                for (searchIndex, searchBlock) in sortedBlocks.enumerated() {
-                    if processedBlocks.contains(searchIndex) { continue }
-                    
-                    // Check if this block could start a new row below the current table
-                    if searchBlock.boundingBox.minY < (rowY - 0.05) { // 5% below current row
-                        var newRowBlocks: [(text: String, boundingBox: CGRect)] = []
-                        
-                        // Try to find blocks for each column position
-                        for columnX in columnPositions {
-                            let columnTolerance: CGFloat = 0.03
-                            
-                            if let matchingBlock = sortedBlocks.first(where: { otherBlock in
-                                !processedBlocks.contains(sortedBlocks.firstIndex(where: { $0.boundingBox == otherBlock.boundingBox }) ?? -1) &&
-                                abs(otherBlock.boundingBox.minX - columnX) <= columnTolerance &&
-                                abs(otherBlock.boundingBox.minY - searchBlock.boundingBox.minY) <= rowTolerance
-                            }) {
-                                newRowBlocks.append((text: matchingBlock.text, boundingBox: matchingBlock.boundingBox))
-                            }
-                        }
-                        
-                        // If we found blocks for most columns, add this as a table row
-                        if newRowBlocks.count >= max(2, columnCount - 1) {
-                            newRowBlocks.sort { $0.boundingBox.minX < $1.boundingBox.minX }
-                            
-                            // Pad row to match column count
-                            var rowData = newRowBlocks.map { $0.text }
-                            while rowData.count < columnCount {
-                                rowData.append("")
-                            }
-                            
-                            tableRows.append(Array(rowData.prefix(columnCount)))
-                            
-                            // Update table bounding box
-                            for block in newRowBlocks {
-                                tableBoundingBox = tableBoundingBox.union(block.boundingBox)
-                            }
-                            
-                            // Mark these blocks as processed
-                            for block in newRowBlocks {
-                                if let blockIndex = sortedBlocks.firstIndex(where: { $0.boundingBox == block.boundingBox }) {
-                                    processedBlocks.insert(blockIndex)
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Create table if we have at least 2 rows
-                if tableRows.count >= 2 {
-                    let headers = tableRows[0]
-                    let dataRows = Array(tableRows[1...])
-                    
-                    let averageConfidence = rowBlocks.map { $0.confidence }.reduce(0, +) / Float(rowBlocks.count)
-                    
-                    let rawTable = TableData(
-                        title: detectTableTitle(near: tableBoundingBox, in: textBlocks),
-                        headers: headers,
-                        rows: dataRows,
-                        boundingBox: tableBoundingBox,
-                        confidence: averageConfidence
-                    )
-                    
-                    // Validate and correct the table
-                    let correctedTable = validateAndCorrectTable(rawTable)
-                    
-                    // Only add valid tables
-                    if correctedTable.isValid {
-                        tables.append(correctedTable)
-                    }
-                }
-            }
-        }
-        
-        return tables
-    }
-    
-    func detectTableTitle(near tableBoundingBox: CGRect, in textBlocks: [(text: String, boundingBox: CGRect, confidence: Float)]) -> String? {
-        let titleSearchArea = CGRect(
-            x: tableBoundingBox.minX - 0.1,
-            y: tableBoundingBox.maxY,
-            width: tableBoundingBox.width + 0.2,
-            height: 0.1
-        )
-        
-        let potentialTitles = textBlocks.filter { block in
-            titleSearchArea.intersects(block.boundingBox) &&
-            !block.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        
-        return potentialTitles.sorted { $0.boundingBox.minY > $1.boundingBox.minY }.first?.text
-    }
-    
-    func validateHeaders(_ headers: [String]) -> [String] {
-        var validatedHeaders = headers
-        
-        // Remove empty headers at the end
-        while validatedHeaders.last?.isEmpty == true {
-            validatedHeaders.removeLast()
-        }
-        
-        // Fill empty headers with generic names
-        for (index, header) in validatedHeaders.enumerated() {
-            if header.isEmpty {
-                validatedHeaders[index] = "Column \(index + 1)"
-            }
-        }
-        
-        // Ensure minimum 2 columns for a valid table
-        if validatedHeaders.count < 2 {
-            while validatedHeaders.count < 2 {
-                validatedHeaders.append("Column \(validatedHeaders.count + 1)")
-            }
-        }
-        
-        return validatedHeaders
-    }
-    
-    func validateRows(_ rows: [[String]], expectedColumnCount: Int) -> [[String]] {
-        return rows.map { row in
-            var validatedRow = row
-            
-            // Pad row to match expected column count
-            while validatedRow.count < expectedColumnCount {
-                validatedRow.append("")
-            }
-            
-            // Trim row if it exceeds expected column count
-            if validatedRow.count > expectedColumnCount {
-                validatedRow = Array(validatedRow.prefix(expectedColumnCount))
-            }
-            
-            return validatedRow
-        }
-    }
-    
-    func cleanText(_ text: String) -> String {
-        return text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "[\\x00-\\x1F\\x7F]", with: "", options: .regularExpression) // Remove control characters
-    }
-    
-    func mergeSplitCells(_ rows: [[String]]) -> [[String]] {
-        guard !rows.isEmpty else { return rows }
-        
-        var mergedRows: [[String]] = []
-        var i = 0
-        
-        while i < rows.count {
-            let currentRow = rows[i]
-            
-            // Check if this row might be a continuation of the previous row
-            if i > 0 && shouldMergeWithPreviousRow(currentRow, previousRow: rows[i-1]) {
-                // Merge with the last row in mergedRows
-                if !mergedRows.isEmpty {
-                    let lastIndex = mergedRows.count - 1
-                    mergedRows[lastIndex] = mergeRows(mergedRows[lastIndex], currentRow)
-                }
-            } else {
-                mergedRows.append(currentRow)
-            }
-            
-            i += 1
-        }
-        
-        return mergedRows
-    }
-    
-    func shouldMergeWithPreviousRow(_ currentRow: [String], previousRow: [String]) -> Bool {
-        // Check if current row has significantly fewer non-empty cells
-        let currentNonEmpty = currentRow.filter { !$0.isEmpty }.count
-        let previousNonEmpty = previousRow.filter { !$0.isEmpty }.count
-        
-        // If current row has very few cells and previous row has more, likely a split
-        if currentNonEmpty > 0 && currentNonEmpty < previousNonEmpty / 2 {
-            return true
-        }
-        
-        // Check if current row starts with what looks like continuation text
-        let firstNonEmpty = currentRow.first { !$0.isEmpty }
-        if let text = firstNonEmpty {
-            let startsWithLowercase = text.first?.isLowercase == true
-            let hasNoPunctuation = !text.contains(".") && !text.contains("!") && !text.contains("?")
-            return startsWithLowercase && hasNoPunctuation && text.count < 30
-        }
-        
-        return false
-    }
-    
-    func mergeRows(_ row1: [String], _ row2: [String]) -> [String] {
-        let maxCount = max(row1.count, row2.count)
-        var merged: [String] = []
-        
-        for i in 0..<maxCount {
-            let cell1 = i < row1.count ? row1[i] : ""
-            let cell2 = i < row2.count ? row2[i] : ""
-            
-            if cell1.isEmpty {
-                merged.append(cell2)
-            } else if cell2.isEmpty {
-                merged.append(cell1)
-            } else {
-                merged.append(cell1 + " " + cell2)
-            }
-        }
-        
-        return merged
-    }
-    
-    func calculateCorrectedConfidence(originalConfidence: Float, headers: [String], rows: [[String]]) -> Float {
-        var confidence = originalConfidence
-        
-        // Reduce confidence for tables with many empty cells
-        let totalCells = headers.count * (rows.count + 1) // +1 for header row
-        let emptyCells = headers.filter { $0.isEmpty }.count + 
-                        rows.flatMap { $0 }.filter { $0.isEmpty }.count
-        
-        let emptyRatio = Float(emptyCells) / Float(totalCells)
-        confidence *= (1.0 - emptyRatio * 0.5) // Reduce by up to 50% based on empty cells
-        
-        // Boost confidence for well-structured tables
-        if rows.count >= 3 && headers.count >= 2 {
-            confidence *= 1.1 // 10% boost for substantial tables
-        }
-        
-        return min(max(confidence, 0.0), 1.0) // Clamp between 0 and 1
-    }
-    
-    // MARK: - Image Preprocessing Methods
-    
-    func preprocessImage(_ image: UIImage, options: ImagePreprocessingOptions) async -> UIImage {
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let ciImage = CIImage(image: image) else {
-                    continuation.resume(returning: image)
-                    return
-                }
-                
-                var processedImage = ciImage
-                
-                // Apply preprocessing steps in optimal order
-                if options.correctRotation {
-                    processedImage = self.correctImageRotation(processedImage)
-                }
-                
-                if options.normalizeColors {
-                    processedImage = self.normalizeImageColors(processedImage)
-                }
-                
-                if options.enhanceContrast {
-                    processedImage = self.enhanceContrast(processedImage)
-                }
-                
-                if options.denoiseImage {
-                    processedImage = self.denoiseImage(processedImage)
-                }
-                
-                if options.sharpenText {
-                    processedImage = self.sharpenForText(processedImage)
-                }
-                
-                // Convert back to UIImage
-                guard let cgImage = self.context.createCGImage(processedImage, from: processedImage.extent) else {
-                    continuation.resume(returning: image)
-                    return
-                }
-                
-                let resultImage = UIImage(cgImage: cgImage)
-                continuation.resume(returning: resultImage)
-            }
-        }
-    }
-    
-    func correctImageRotation(_ image: CIImage) -> CIImage {
-        // Detect text orientation and correct rotation
-        let request = VNDetectTextRectanglesRequest()
-        let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        
-        do {
-            try handler.perform([request])
-            
-            if let results = request.results, !results.isEmpty {
-                // Analyze text orientation from multiple text rectangles
-                var angles: [Float] = []
-                
-                for observation in results.prefix(10) { // Limit to first 10 for performance
-                    let boundingBox = observation.boundingBox
-                    
-                    // Simple heuristic: if width >> height, likely horizontal text
-                    // if height >> width, likely vertical text
-                    let aspectRatio = boundingBox.width / boundingBox.height
-                    
-                    if aspectRatio < 0.5 {
-                        // Likely rotated 90 degrees
-                        angles.append(90.0)
-                    } else if aspectRatio > 2.0 {
-                        // Likely horizontal
-                        angles.append(0.0)
-                    }
-                }
-                
-                // Find most common angle
-                if !angles.isEmpty {
-                    let mostCommonAngle = angles.max(by: { angle1, angle2 in
-                        angles.filter { $0 == angle1 }.count < angles.filter { $0 == angle2 }.count
-                    }) ?? 0.0
-                    
-                    if abs(mostCommonAngle) > 0 {
-                        let radians = mostCommonAngle * .pi / 180
-                        return image.transformed(by: CGAffineTransform(rotationAngle: CGFloat(-radians)))
-                    }
-                }
-            }
-        } catch {
-            print("Text orientation detection failed: \(error)")
-        }
-        
-        return image
-    }
-    
-    func normalizeImageColors(_ image: CIImage) -> CIImage {
-        // Apply color normalization for better text contrast
-        let filter = CIFilter.colorControls()
-        filter.inputImage = image
-        filter.saturation = 0.0  // Convert to grayscale
-        filter.brightness = 0.1  // Slight brightness increase
-        filter.contrast = 1.2    // Increase contrast
-        
-        return filter.outputImage ?? image
-    }
-    
-    func enhanceContrast(_ image: CIImage) -> CIImage {
-        // Use histogram equalization for better contrast
-        let filter = CIFilter.exposureAdjust()
-        filter.inputImage = image
-        
-        // Analyze image brightness to determine optimal exposure
-        let averageFilter = CIFilter.areaAverage()
-        averageFilter.inputImage = image
-        averageFilter.extent = image.extent
-        
-        if let averageImage = averageFilter.outputImage {
-            // Simple brightness analysis
-            var bitmap = [UInt8](repeating: 0, count: 4)
-            context.render(averageImage, toBitmap: &bitmap, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
-            
-            let brightness = (Int(bitmap[0]) + Int(bitmap[1]) + Int(bitmap[2])) / 3
-            
-            // Adjust exposure based on brightness
-            if brightness < 128 {
-                filter.ev = 0.5  // Brighten dark images
-            } else if brightness > 200 {
-                filter.ev = -0.3  // Darken very bright images
-            }
-        }
-        
-        return filter.outputImage ?? image
-    }
-    
-    func denoiseImage(_ image: CIImage) -> CIImage {
-        // Apply noise reduction
-        let filter = CIFilter.noiseReduction()
-        filter.inputImage = image
-        filter.noiseLevel = 0.02
-        filter.sharpness = 0.4
-        
-        return filter.outputImage ?? image
-    }
-    
-    func sharpenForText(_ image: CIImage) -> CIImage {
-        // Apply unsharp mask optimized for text
-        let filter = CIFilter.unsharpMask()
-        filter.inputImage = image
-        filter.radius = 2.5
-        filter.intensity = 0.5
-        
-        return filter.outputImage ?? image
-    }
-}
-
-// MARK: - Table Data Extensions
-extension TableData {
-    
-    private func formatAsMarkdown() -> String {
-        var result = ""
-        
-        if let title = title, !title.isEmpty {
-            result += "**\(title)**\n\n"
-        }
-        
-        // Create markdown table format
-        if !headers.isEmpty {
-            result += "| " + headers.joined(separator: " | ") + " |\n"
-            result += "|" + String(repeating: "---|", count: headers.count) + "\n"
-        }
-        
-        for row in rows {
-            let paddedRow = padRowToMatchHeaders(row)
-            result += "| " + paddedRow.joined(separator: " | ") + " |\n"
-        }
-        
-        return result
-    }
-    
-    private func formatAsCSV() -> String {
-        var result = ""
-        
-        if let title = title, !title.isEmpty {
-            result += "\"\(title)\"\n"
-        }
-        
-        // Add headers
-        if !headers.isEmpty {
-            result += headers.map { "\"\($0)\"" }.joined(separator: ",") + "\n"
-        }
-        
-        // Add rows
-        for row in rows {
-            let paddedRow = padRowToMatchHeaders(row)
-            result += paddedRow.map { "\"\($0)\"" }.joined(separator: ",") + "\n"
-        }
-        
-        return result
-    }
-    
-    private func formatAsJSON() -> String {
-        var tableDict: [String: Any] = [:]
-        
-        if let title = title, !title.isEmpty {
-            tableDict["title"] = title
-        }
-        
-        tableDict["headers"] = headers
-        tableDict["rows"] = rows.map { padRowToMatchHeaders($0) }
-        tableDict["confidence"] = confidence
-        
-        // Convert to structured data
-        var tableData: [[String: String]] = []
-        for row in rows {
-            let paddedRow = padRowToMatchHeaders(row)
-            var rowDict: [String: String] = [:]
-            
-            for (index, header) in headers.enumerated() {
-                let value = index < paddedRow.count ? paddedRow[index] : ""
-                rowDict[header] = value
-            }
-            tableData.append(rowDict)
-        }
-        
-        tableDict["data"] = tableData
-        
-        do {
-            let jsonData = try JSONSerialization.data(withJSONObject: tableDict, options: [.prettyPrinted])
-            return String(data: jsonData, encoding: .utf8) ?? "{}"
-        } catch {
-            return "{\"error\": \"Failed to serialize table data\"}"
-        }
-    }
-    
-    private func formatAsPlainText() -> String {
-        var result = ""
-        
-        if let title = title, !title.isEmpty {
-            result += "\(title)\n"
-            result += String(repeating: "=", count: title.count) + "\n\n"
-        }
-        
-        // Calculate column widths
-        let columnWidths = calculateColumnWidths()
-        
-        // Add headers
-        if !headers.isEmpty {
-            let headerRow = headers.enumerated().map { index, header in
-                let width = index < columnWidths.count ? columnWidths[index] : header.count
-                return header.padding(toLength: width, withPad: " ", startingAt: 0)
-            }.joined(separator: " | ")
-            
-            result += headerRow + "\n"
-            result += String(repeating: "-", count: headerRow.count) + "\n"
-        }
-        
-        // Add rows
-        for row in rows {
-            let paddedRow = padRowToMatchHeaders(row)
-            let formattedRow = paddedRow.enumerated().map { index, cell in
-                let width = index < columnWidths.count ? columnWidths[index] : cell.count
-                return cell.padding(toLength: width, withPad: " ", startingAt: 0)
-            }.joined(separator: " | ")
-            
-            result += formattedRow + "\n"
-        }
-        
-        return result
-    }
-    
-    private func padRowToMatchHeaders(_ row: [String]) -> [String] {
-        var paddedRow = row
-        while paddedRow.count < headers.count {
-            paddedRow.append("")
-        }
-        return Array(paddedRow.prefix(headers.count))
-    }
-    
-    private func calculateColumnWidths() -> [Int] {
-        var widths = headers.map { $0.count }
-        
-        for row in rows {
-            let paddedRow = padRowToMatchHeaders(row)
-            for (index, cell) in paddedRow.enumerated() {
-                if index < widths.count {
-                    widths[index] = max(widths[index], cell.count)
-                }
-            }
-        }
-        
-        return widths
     }
 }

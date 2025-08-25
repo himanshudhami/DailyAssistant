@@ -16,6 +16,8 @@ struct NoteEditorView: View {
     @State private var showingFileImporter = false
     @State private var showingImagePicker = false
     @State private var showingAIProcessing = false
+    @State private var selectedTab = 0
+    @State private var isContentExpanded = true
     
     init(note: Note? = nil, currentFolder: Folder? = nil) {
         _viewModel = StateObject(wrappedValue: NoteEditorViewModel(note: note, currentFolder: currentFolder))
@@ -23,70 +25,95 @@ struct NoteEditorView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Main Content
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Basic Note Fields
-                        BasicNoteFields(viewModel: viewModel)
-                        
-                        // AI Enhanced Content
-                        if hasAIContent {
-                            AIContentSection(viewModel: viewModel)
-                        }
-                        
-                        // Media & Attachments
-                        if hasMediaContent {
-                            MediaSection(
-                                viewModel: viewModel,
-                                audioManager: audioManager
+            ZStack {
+                // Background
+                Color(UIColor.systemGroupedBackground)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Main Content
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Collapsible Title & Content Section
+                            CollapsibleNoteContent(
+                                title: $viewModel.title,
+                                content: $viewModel.content,
+                                isExpanded: $isContentExpanded
                             )
+                            .padding(.horizontal)
+                            .padding(.top)
+                            
+                            // Tab Selector
+                            if hasAnyContent {
+                                TabSelector(
+                                    selectedTab: $selectedTab,
+                                    hasAIContent: hasAIContent,
+                                    hasMediaContent: hasMediaContent,
+                                    hasOrganization: hasOrganization
+                                )
+                                .padding(.horizontal)
+                            }
+                            
+                            // Tab Content
+                            TabContentView(
+                                selectedTab: selectedTab,
+                                viewModel: viewModel,
+                                audioManager: audioManager,
+                                hasAIContent: hasAIContent,
+                                hasMediaContent: hasMediaContent,
+                                hasOrganization: hasOrganization,
+                                hasLocationData: hasLocationData
+                            )
+                            .padding(.horizontal)
+                            
+                            // Spacer for bottom toolbar
+                            Color.clear.frame(height: 100)
                         }
-
-                        // Location
-                        if hasLocationData {
-                            LocationSection(viewModel: viewModel)
-                        }
-
-                        // Organization
-                        OrganizationSection(viewModel: viewModel)
                     }
-                    .padding()
+                    .scrollDismissesKeyboard(.interactively)
                 }
                 
-                // Bottom Toolbar
-                EditorToolbar(
-                    audioManager: audioManager,
-                    showingFileImporter: $showingFileImporter,
-                    showingImagePicker: $showingImagePicker,
-                    showingAIProcessing: $showingAIProcessing,
-                    onVoiceRecordingComplete: handleVoiceRecording
-                )
-            }
-            .onTapGesture {
-                dismissKeyboard()
+                // Floating Bottom Toolbar
+                VStack {
+                    Spacer()
+                    FloatingToolbar(
+                        audioManager: audioManager,
+                        showingFileImporter: $showingFileImporter,
+                        showingImagePicker: $showingImagePicker,
+                        onVoiceRecordingComplete: handleVoiceRecording
+                    )
+                }
             }
             .navigationTitle(viewModel.isNewNote ? "New Log" : "Edit Log")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
                 }
                 
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 16) {
                         if viewModel.hasContent {
-                            Button("AI Enhance") {
+                            Button {
                                 showingAIProcessing = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "sparkles")
+                                    Text("AI Enhance")
+                                }
+                                .foregroundColor(.green)
                             }
                             .disabled(viewModel.isProcessing)
-                            .font(.subheadline)
                         }
                         
                         Button(viewModel.isSaving ? "Saving..." : "Save") {
                             saveAndDismiss()
                         }
                         .fontWeight(.semibold)
+                        .foregroundColor(.blue)
                         .disabled(!viewModel.hasContent || viewModel.isSaving)
                     }
                 }
@@ -122,7 +149,16 @@ struct NoteEditorView: View {
     private var hasMediaContent: Bool {
         !viewModel.attachments.isEmpty ||
         viewModel.audioURL != nil ||
+        viewModel.transcript != nil ||
         audioManager.isRecording
+    }
+    
+    private var hasOrganization: Bool {
+        !viewModel.tags.isEmpty || viewModel.selectedCategory != nil
+    }
+    
+    private var hasAnyContent: Bool {
+        hasAIContent || hasMediaContent || hasOrganization
     }
 
     private var hasLocationData: Bool {
@@ -153,271 +189,480 @@ struct NoteEditorView: View {
     }
 }
 
-// MARK: - Basic Note Fields
-struct BasicNoteFields: View {
-    @ObservedObject var viewModel: NoteEditorViewModel
+// MARK: - Collapsible Note Content
+struct CollapsibleNoteContent: View {
+    @Binding var title: String
+    @Binding var content: String
+    @Binding var isExpanded: Bool
+    @FocusState private var isTitleFocused: Bool
+    @FocusState private var isContentFocused: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Title Field
-            TextField("Log Title", text: $viewModel.title)
-                .font(.title2)
-                .fontWeight(.semibold)
-                .textFieldStyle(.plain)
-            
-            Divider()
-            
-            // Content Editor
-            TextEditor(text: $viewModel.content)
-                .font(.body)
-                .frame(minHeight: 200)
-                .scrollContentBackground(.hidden)
-        }
-    }
-}
-
-// MARK: - AI Content Section
-struct AIContentSection: View {
-    @ObservedObject var viewModel: NoteEditorViewModel
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(
-                title: "AI Insights",
-                icon: "brain.head.profile",
-                color: .blue
-            )
-            
-            VStack(alignment: .leading, spacing: 12) {
-                // AI Summary
-                if let aiSummary = viewModel.aiSummary, !aiSummary.isEmpty {
-                    InfoCard(
-                        title: "Summary",
-                        content: aiSummary,
-                        color: .blue,
-                        icon: "text.alignleft"
-                    )
-                }
-                
-                // Key Points - only show if different from summary and not empty
-                if !viewModel.keyPoints.isEmpty && 
-                   !(viewModel.keyPoints.count == 1 && viewModel.keyPoints.first == viewModel.aiSummary) {
-                    BulletPointCard(
-                        title: "Key Points",
-                        items: viewModel.keyPoints,
-                        color: .orange,
-                        icon: "key.fill"
-                    )
-                }
-                
-                // Action Items
-                if !viewModel.actionItems.isEmpty {
-                    ActionItemsCard(actionItems: $viewModel.actionItems)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Media Section
-struct MediaSection: View {
-    @ObservedObject var viewModel: NoteEditorViewModel
-    @ObservedObject var audioManager: AudioManager
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(
-                title: "Media & Attachments",
-                icon: "paperclip",
-                color: .purple
-            )
-            
-            VStack(spacing: 12) {
-                // Audio Recording
-                if viewModel.audioURL != nil || audioManager.isRecording {
-                    AudioPlayerCard(
-                        audioURL: viewModel.audioURL,
-                        audioManager: audioManager,
-                        transcript: $viewModel.transcript
-                    )
-                }
-                
-                // Attachments
-                if !viewModel.attachments.isEmpty {
-                    AttachmentsCard(
-                        attachments: viewModel.attachments,
-                        onDelete: viewModel.removeAttachment
-                    )
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Organization Section
-struct OrganizationSection: View {
-    @ObservedObject var viewModel: NoteEditorViewModel
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(
-                title: "Organization",
-                icon: "folder",
-                color: .green
-            )
-            
-            VStack(spacing: 12) {
-                // Tags
-                TagsCard(tags: $viewModel.tags)
-                
-                // Category
-                CategoryCard(selectedCategory: $viewModel.selectedCategory)
-            }
-        }
-    }
-}
-
-// MARK: - Reusable Components
-struct SectionHeader: View {
-    let title: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundColor(color)
-                .font(.headline)
-            
-            Text(title)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(color)
-            
-            Spacer()
-        }
-    }
-}
-
-struct InfoCard: View {
-    @Environment(\.appTheme) private var theme
-    let title: String
-    let content: String
-    let color: Color?
-    let icon: String
-    
-    init(title: String, content: String, color: Color? = nil, icon: String) {
-        self.title = title
-        self.content = content
-        self.color = color
-        self.icon = icon
-    }
-    
-    var body: some View {
-        let cardColor = color ?? theme.primary
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with title
             HStack {
-                Image(systemName: icon)
-                    .foregroundColor(cardColor)
-                    .font(.subheadline)
+                TextField("Log Title", text: $title)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .focused($isTitleFocused)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        isContentFocused = true
+                    }
                 
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(cardColor)
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                        .foregroundColor(.gray)
+                        .font(.caption)
+                }
+            }
+            .padding()
+            
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal)
+                
+                // Content area
+                TextEditor(text: $content)
+                    .font(.body)
+                    .focused($isContentFocused)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 120, maxHeight: 200)
+                    .scrollContentBackground(.hidden)
+            }
+        }
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Tab Selector
+struct TabSelector: View {
+    @Binding var selectedTab: Int
+    let hasAIContent: Bool
+    let hasMediaContent: Bool
+    let hasOrganization: Bool
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            TabButton(
+                title: "AI Insights",
+                icon: "sparkles",
+                isSelected: selectedTab == 0,
+                isEnabled: hasAIContent
+            ) {
+                selectedTab = 0
             }
             
-            Text(content)
-                .font(.body)
-                .foregroundColor(theme.textPrimary)
+            TabButton(
+                title: "Media",
+                icon: "paperclip",
+                isSelected: selectedTab == 1,
+                isEnabled: hasMediaContent
+            ) {
+                selectedTab = 1
+            }
+            
+            TabButton(
+                title: "Organize",
+                icon: "folder",
+                isSelected: selectedTab == 2,
+                isEnabled: hasOrganization
+            ) {
+                selectedTab = 2
+            }
         }
-        .padding(12)
-        .background(cardColor.opacity(0.1))
+        .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(10)
     }
 }
 
-struct BulletPointCard: View {
-    @Environment(\.appTheme) private var theme
+struct TabButton: View {
     let title: String
-    let items: [String]
-    let color: Color?
     let icon: String
-    
-    init(title: String, items: [String], color: Color? = nil, icon: String) {
-        self.title = title
-        self.items = items
-        self.color = color
-        self.icon = icon
-    }
+    let isSelected: Bool
+    let isEnabled: Bool
+    let action: () -> Void
     
     var body: some View {
-        let cardColor = color ?? theme.primary
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        Button(action: action) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .foregroundColor(cardColor)
-                    .font(.subheadline)
-                
+                    .font(.caption)
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(cardColor)
+                    .font(.caption)
+                    .fontWeight(isSelected ? .semibold : .regular)
+            }
+            .foregroundColor(isSelected ? .primary : (isEnabled ? .secondary : Color.secondary.opacity(0.5)))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                isSelected ? Color(UIColor.systemBackground) : Color.clear
+            )
+            .cornerRadius(8)
+        }
+        .disabled(!isEnabled)
+    }
+}
+
+// MARK: - Tab Content View
+struct TabContentView: View {
+    let selectedTab: Int
+    @ObservedObject var viewModel: NoteEditorViewModel
+    @ObservedObject var audioManager: AudioManager
+    let hasAIContent: Bool
+    let hasMediaContent: Bool
+    let hasOrganization: Bool
+    let hasLocationData: Bool
+    
+    var body: some View {
+        Group {
+            switch selectedTab {
+            case 0:
+                if hasAIContent {
+                    ModernAIContentSection(viewModel: viewModel)
+                }
+            case 1:
+                if hasMediaContent {
+                    ModernMediaSection(
+                        viewModel: viewModel,
+                        audioManager: audioManager,
+                        hasLocationData: hasLocationData
+                    )
+                }
+            case 2:
+                if hasOrganization {
+                    ModernOrganizationSection(viewModel: viewModel)
+                }
+            default:
+                EmptyView()
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+    }
+}
+
+// MARK: - Modern AI Content Section
+struct ModernAIContentSection: View {
+    @ObservedObject var viewModel: NoteEditorViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .foregroundColor(.green)
+                    .font(.headline)
+                Text("AI Insights")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            .padding(.bottom, 4)
+            
+            // AI Summary
+            if let aiSummary = viewModel.aiSummary, !aiSummary.isEmpty {
+                ModernCard(
+                    title: "Summary",
+                    icon: "doc.text",
+                    color: .green.opacity(0.8)
+                ) {
+                    Text(aiSummary)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                }
             }
             
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(items, id: \.self) { item in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("•")
-                            .foregroundColor(cardColor)
-                            .fontWeight(.bold)
-                        
-                        Text(item)
-                            .font(.body)
-                            .foregroundColor(theme.textPrimary)
-                        
-                        Spacer()
+            // Key Points
+            if !viewModel.keyPoints.isEmpty {
+                ModernCard(
+                    title: "Key Points",
+                    icon: "list.bullet",
+                    color: .blue.opacity(0.8)
+                ) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(viewModel.keyPoints, id: \.self) { point in
+                            HStack(alignment: .top, spacing: 8) {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 6, height: 6)
+                                    .padding(.top, 6)
+                                Text(point)
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Action Items
+            if !viewModel.actionItems.isEmpty {
+                ModernCard(
+                    title: "Action Items",
+                    icon: "checkmark.circle",
+                    color: .orange.opacity(0.8)
+                ) {
+                    VStack(spacing: 8) {
+                        ForEach(viewModel.actionItems.indices, id: \.self) { index in
+                            ModernActionItemRow(actionItem: $viewModel.actionItems[index])
+                        }
                     }
                 }
             }
         }
-        .padding(12)
-        .background(cardColor.opacity(0.1))
-        .cornerRadius(10)
     }
 }
 
-struct ActionItemsCard: View {
-    @Environment(\.appTheme) private var theme
-    @Binding var actionItems: [ActionItem]
+// MARK: - Modern Media Section
+struct ModernMediaSection: View {
+    @ObservedObject var viewModel: NoteEditorViewModel
+    @ObservedObject var audioManager: AudioManager
+    let hasLocationData: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "paperclip")
+                    .foregroundColor(.blue)
+                    .font(.headline)
+                Text("Media & Attachments")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            .padding(.bottom, 4)
+            
+            // Audio Recording with Waveform
+            if viewModel.audioURL != nil || audioManager.isRecording || viewModel.transcript != nil {
+                ModernCard(
+                    title: "Audio Recording",
+                    icon: "waveform",
+                    color: .purple.opacity(0.8)
+                ) {
+                    VStack(spacing: 12) {
+                        // Audio Waveform Visualization
+                        if audioManager.isRecording || viewModel.audioURL != nil {
+                            AudioWaveformView(isRecording: audioManager.isRecording)
+                                .frame(height: 60)
+                                .background(Color.purple.opacity(0.05))
+                                .cornerRadius(8)
+                        }
+                        
+                        // Playback Controls
+                        if let audioURL = viewModel.audioURL {
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    if audioManager.isPlaying {
+                                        audioManager.stopPlayback()
+                                    } else {
+                                        audioManager.playAudio(from: audioURL)
+                                    }
+                                }) {
+                                    Image(systemName: audioManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                        .font(.system(size: 36))
+                                        .foregroundColor(.purple)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Audio Note")
+                                        .font(.footnote)
+                                        .fontWeight(.medium)
+                                    Text(audioManager.formatDuration(audioManager.recordingDuration))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                if audioManager.isPlaying {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle())
+                                        .scaleEffect(0.8)
+                                }
+                            }
+                        } else if audioManager.isRecording {
+                            HStack {
+                                Image(systemName: "record.circle")
+                                    .foregroundColor(.red)
+                                    .font(.title2)
+                                
+                                Text("Recording...")
+                                    .foregroundColor(.red)
+                                    .fontWeight(.medium)
+                                
+                                Spacer()
+                                
+                                Text(audioManager.formatDuration(audioManager.recordingDuration))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        // Transcript
+                        if let transcript = viewModel.transcript, !transcript.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Transcript")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.purple)
+                                
+                                Text(transcript)
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(8)
+                                    .background(Color.purple.opacity(0.05))
+                                    .cornerRadius(6)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Image Attachments Gallery
+            let imageAttachments = viewModel.attachments.filter { $0.type == .image }
+            if !imageAttachments.isEmpty {
+                ModernCard(
+                    title: "Photos",
+                    icon: "photo",
+                    color: .blue.opacity(0.8)
+                ) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(imageAttachments) { attachment in
+                                ImageThumbnailView(
+                                    attachment: attachment,
+                                    onDelete: { viewModel.removeAttachment(attachment) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Audio Attachments
+            let audioAttachments = viewModel.attachments.filter { $0.type == .audio }
+            if !audioAttachments.isEmpty {
+                ModernCard(
+                    title: "Audio Files",
+                    icon: "waveform",
+                    color: .purple.opacity(0.8)
+                ) {
+                    VStack(spacing: 8) {
+                        ForEach(audioAttachments) { attachment in
+                            AudioAttachmentRow(
+                                attachment: attachment,
+                                audioManager: audioManager,
+                                onDelete: { viewModel.removeAttachment(attachment) }
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Document Attachments
+            let documentAttachments = viewModel.attachments.filter { $0.type != .image && $0.type != .audio }
+            if !documentAttachments.isEmpty {
+                ModernCard(
+                    title: "Documents",
+                    icon: "doc.fill",
+                    color: .indigo.opacity(0.8)
+                ) {
+                    VStack(spacing: 8) {
+                        ForEach(documentAttachments) { attachment in
+                            DocumentAttachmentRow(
+                                attachment: attachment,
+                                onDelete: { viewModel.removeAttachment(attachment) }
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Location
+            if hasLocationData {
+                ModernLocationCard(viewModel: viewModel)
+            }
+        }
+    }
+}
+
+// MARK: - Modern Organization Section
+struct ModernOrganizationSection: View {
+    @ObservedObject var viewModel: NoteEditorViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "folder")
+                    .foregroundColor(.orange)
+                    .font(.headline)
+                Text("Organization")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            .padding(.bottom, 4)
+            
+            // Tags
+            if !viewModel.tags.isEmpty || viewModel.tags.count < 5 {
+                ModernCard(
+                    title: "Tags",
+                    icon: "tag",
+                    color: .teal.opacity(0.8)
+                ) {
+                    ModernTagsView(tags: $viewModel.tags)
+                }
+            }
+            
+            // Category
+            ModernCard(
+                title: "Category",
+                icon: "square.grid.2x2",
+                color: .pink.opacity(0.8)
+            ) {
+                ModernCategoryPicker(selectedCategory: $viewModel.selectedCategory)
+            }
+        }
+    }
+}
+
+// MARK: - Modern Card Component
+struct ModernCard<Content: View>: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let content: () -> Content
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "checkmark.circle")
-                    .foregroundColor(theme.success)
-                    .font(.subheadline)
-                
-                Text("Action Items")
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+                Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(theme.success)
+                    .foregroundColor(.primary)
             }
             
-            VStack(spacing: 8) {
-                ForEach(actionItems.indices, id: \.self) { index in
-                    ActionItemRow(actionItem: $actionItems[index])
-                }
-            }
+            content()
+                .padding(.leading, 14)
         }
         .padding(12)
-        .background(theme.success.opacity(0.1))
+        .background(Color(UIColor.tertiarySystemGroupedBackground))
         .cornerRadius(10)
     }
 }
 
-struct ActionItemRow: View {
-    @Environment(\.appTheme) private var theme
+// MARK: - Modern Action Item Row
+struct ModernActionItemRow: View {
     @Binding var actionItem: ActionItem
     
     var body: some View {
@@ -426,109 +671,366 @@ struct ActionItemRow: View {
                 actionItem.completed.toggle()
             }) {
                 Image(systemName: actionItem.completed ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(actionItem.completed ? theme.success : theme.textSecondary)
+                    .foregroundColor(actionItem.completed ? .green : .gray)
                     .font(.title3)
             }
             
             Text(actionItem.title)
                 .font(.body)
                 .strikethrough(actionItem.completed)
-                .foregroundColor(actionItem.completed ? theme.textSecondary : theme.textPrimary)
+                .foregroundColor(actionItem.completed ? .secondary : .primary)
             
             Spacer()
             
-            // Priority indicator
             Circle()
-                .fill(actionItem.priority.themedColor(for: theme))
+                .fill(priorityColor(actionItem.priority))
                 .frame(width: 8, height: 8)
         }
     }
-}
-
-struct AudioPlayerCard: View {
-    @Environment(\.appTheme) private var theme
-    let audioURL: URL?
-    @ObservedObject var audioManager: AudioManager
-    @Binding var transcript: String?
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "waveform")
-                    .foregroundColor(theme.warning)
-                    .font(.subheadline)
-                
-                Text("Audio Recording")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(theme.warning)
-            }
-            
-            VStack(spacing: 8) {
-                if let audioURL = audioURL {
-                    // Audio playback controls would go here
-                    HStack {
-                        Button("Play") {
-                            audioManager.playAudio(from: audioURL)
-                        }
-                        .disabled(audioManager.isPlaying)
-                        
-                        Spacer()
-                        
-                        Text(audioManager.formatDuration(audioManager.recordingDuration))
-                            .font(.caption)
-                            .foregroundColor(theme.textSecondary)
-                    }
-                } else if audioManager.isRecording {
-                    HStack {
-                        Image(systemName: "record.circle")
-                            .foregroundColor(.red)
-                        
-                        Text("Recording...")
-                            .foregroundColor(theme.error)
-                        
-                        Spacer()
-                        
-                        Text(audioManager.formatDuration(audioManager.recordingDuration))
-                            .font(.caption)
-                    }
-                }
-                
-                if let transcript = transcript, !transcript.isEmpty {
-                    Text("Transcript: \(transcript)")
-                        .font(.caption)
-                        .foregroundColor(theme.textSecondary)
-                        .lineLimit(2)
-                }
-            }
+    private func priorityColor(_ priority: Priority) -> Color {
+        switch priority {
+        case .low: return .green
+        case .medium: return .orange
+        case .high: return .red
+        case .urgent: return .purple
         }
-        .padding(12)
-        .background(theme.warning.opacity(0.1))
-        .cornerRadius(10)
     }
 }
 
-// AttachmentsCard and related components moved to AttachmentComponents.swift for better organization
+// MARK: - Audio Waveform View
+struct AudioWaveformView: View {
+    let isRecording: Bool
+    @State private var animationOffset: CGFloat = 0
+    
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<40, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color.purple.opacity(0.7))
+                    .frame(width: 3, height: waveHeight(for: index))
+                    .animation(
+                        isRecording ? 
+                        Animation.easeInOut(duration: 0.5 + Double(index) * 0.02)
+                            .repeatForever(autoreverses: true) :
+                        .default,
+                        value: isRecording
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    private func waveHeight(for index: Int) -> CGFloat {
+        if isRecording {
+            return CGFloat.random(in: 8...40)
+        } else {
+            let heights: [CGFloat] = [12, 25, 18, 32, 15, 28, 22, 35, 16, 30]
+            return heights[index % heights.count]
+        }
+    }
+}
 
-struct TagsCard: View {
-    @Environment(\.appTheme) private var theme
+// MARK: - Image Thumbnail View
+struct ImageThumbnailView: View {
+    let attachment: Attachment
+    let onDelete: () -> Void
+    @State private var thumbnailImage: UIImage?
+    @State private var showingFullImage = false
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .topTrailing) {
+                // Thumbnail
+                Group {
+                    if let thumbnailImage = thumbnailImage {
+                        Image(uiImage: thumbnailImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else if let thumbnailData = attachment.thumbnailData,
+                              let image = UIImage(data: thumbnailData) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                }
+                .frame(width: 120, height: 120)
+                .clipped()
+                .cornerRadius(8)
+                .onTapGesture {
+                    showingFullImage = true
+                }
+                
+                // Delete button
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.white)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                        .font(.caption)
+                }
+                .offset(x: 5, y: -5)
+            }
+            
+            // Filename
+            Text(attachment.fileName)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(width: 120)
+        }
+        .sheet(isPresented: $showingFullImage) {
+            FullImageView(attachment: attachment)
+        }
+        .onAppear {
+            loadThumbnail()
+        }
+    }
+    
+    private func loadThumbnail() {
+        guard thumbnailImage == nil else { return }
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL),
+               let image = UIImage(contentsOfFile: resolvedURL.path) {
+                let thumbnail = image.resizedForThumbnail(to: CGSize(width: 120, height: 120))
+                DispatchQueue.main.async {
+                    self.thumbnailImage = thumbnail
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Full Image View
+struct FullImageView: View {
+    let attachment: Attachment
+    @Environment(\.dismiss) private var dismiss
+    @State private var fullImage: UIImage?
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                if let fullImage = fullImage {
+                    Image(uiImage: fullImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+            }
+            .navigationTitle(attachment.fileName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+        .onAppear {
+            loadFullImage()
+        }
+    }
+    
+    private func loadFullImage() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL),
+               let image = UIImage(contentsOfFile: resolvedURL.path) {
+                DispatchQueue.main.async {
+                    self.fullImage = image
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Audio Attachment Row
+struct AudioAttachmentRow: View {
+    let attachment: Attachment
+    @ObservedObject var audioManager: AudioManager
+    let onDelete: () -> Void
+    @State private var isPlaying = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Play/Pause button
+            Button(action: {
+                togglePlayback()
+            }) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.purple.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .foregroundColor(.purple)
+                        .font(.title3)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(attachment.fileName)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 8) {
+                    Text("Audio")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("•")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(formatFileSize(attachment.fileSize))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            // Waveform indicator
+            if isPlaying {
+                HStack(spacing: 1) {
+                    ForEach(0..<5, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.purple.opacity(0.6))
+                            .frame(width: 2, height: CGFloat.random(in: 8...16))
+                            .animation(
+                                Animation.easeInOut(duration: 0.3 + Double(index) * 0.05)
+                                    .repeatForever(autoreverses: true),
+                                value: isPlaying
+                            )
+                    }
+                }
+                .frame(width: 20)
+            }
+            
+            Button(action: onDelete) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.gray)
+                    .font(.title3)
+            }
+        }
+        .padding(.vertical, 4)
+        .onDisappear {
+            if isPlaying {
+                audioManager.stopPlayback()
+            }
+        }
+    }
+    
+    private func togglePlayback() {
+        if isPlaying {
+            audioManager.stopPlayback()
+            isPlaying = false
+        } else {
+            // Try to play the audio file
+            if let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL) {
+                audioManager.playAudio(from: resolvedURL)
+                isPlaying = true
+            }
+        }
+    }
+    
+    private func formatFileSize(_ size: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: size)
+    }
+}
+
+// MARK: - Document Attachment Row
+struct DocumentAttachmentRow: View {
+    let attachment: Attachment
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // File type icon with background
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(fileTypeColor)
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: attachment.type.systemImageName)
+                    .foregroundColor(.white)
+                    .font(.title3)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(attachment.fileName)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 8) {
+                    Text(attachment.type.displayName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("•")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(formatFileSize(attachment.fileSize))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: onDelete) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.gray)
+                    .font(.title3)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private var fileTypeColor: Color {
+        switch attachment.type {
+        case .pdf: return .red
+        case .document: return .blue
+        case .video: return .orange
+        default: return .gray
+        }
+    }
+    
+    private func formatFileSize(_ size: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: size)
+    }
+}
+
+// MARK: - Modern Tags View
+struct ModernTagsView: View {
     @Binding var tags: [String]
     @State private var newTag = ""
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "tag")
-                    .foregroundColor(theme.primary)
-                    .font(.subheadline)
-                
-                Text("Tags")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(theme.primary)
-            }
-            
-            // Existing tags
             if !tags.isEmpty {
                 FlowLayout(spacing: 8) {
                     ForEach(tags, id: \.self) { tag in
@@ -539,8 +1041,7 @@ struct TagsCard: View {
                 }
             }
             
-            // Add new tag
-            if tags.count < 5 {  // Limit to 5 tags
+            if tags.count < 5 {
                 HStack {
                     TextField("Add tag", text: $newTag)
                         .textFieldStyle(.roundedBorder)
@@ -553,15 +1054,8 @@ struct TagsCard: View {
                     }
                     .disabled(newTag.isEmpty)
                 }
-            } else {
-                Text("Maximum 5 tags allowed")
-                    .font(.caption)
-                    .foregroundColor(theme.textSecondary)
             }
         }
-        .padding(12)
-        .background(theme.primary.opacity(0.1))
-        .cornerRadius(10)
     }
     
     private func addTag() {
@@ -573,34 +1067,10 @@ struct TagsCard: View {
     }
 }
 
-struct TagChip: View {
-    @Environment(\.appTheme) private var theme
-    let text: String
-    let onDelete: () -> Void
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Text("#\(text)")
-                .font(.caption)
-                .foregroundColor(theme.primary)
-            
-            Button(action: onDelete) {
-                Image(systemName: "xmark")
-                    .font(.caption2)
-                    .foregroundColor(theme.primary)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(theme.primary.opacity(0.2))
-        .cornerRadius(8)
-    }
-}
-
-struct CategoryCard: View {
-    @Environment(\.appTheme) private var theme
+// MARK: - Modern Category Picker
+struct ModernCategoryPicker: View {
     @Binding var selectedCategory: Category?
-    // This would typically fetch categories from the view model
+    
     private let availableCategories = [
         Category(name: "Personal", color: "#34C759"),
         Category(name: "Work", color: "#007AFF"),
@@ -609,107 +1079,175 @@ struct CategoryCard: View {
     ]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "folder")
-                    .foregroundColor(theme.success)
-                    .font(.subheadline)
-                
-                Text("Category")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(theme.success)
+        Menu {
+            Button("None") {
+                selectedCategory = nil
             }
             
-            Menu {
-                Button("None") {
-                    selectedCategory = nil
+            Divider()
+            
+            ForEach(availableCategories) { category in
+                Button(category.name) {
+                    selectedCategory = category
                 }
-                
-                Divider()
-                
-                ForEach(availableCategories) { category in
-                    Button(category.name) {
-                        selectedCategory = category
-                    }
-                }
-            } label: {
-                HStack {
-                    Text(selectedCategory?.name ?? "Select Category")
-                        .foregroundColor(selectedCategory != nil ? theme.textPrimary : theme.textSecondary)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.down")
-                        .foregroundColor(theme.textSecondary)
-                        .font(.caption)
-                }
-                .padding(12)
-                .background(theme.sectionBackground)
-                .cornerRadius(8)
             }
+        } label: {
+            HStack {
+                Text(selectedCategory?.name ?? "Select Category")
+                    .foregroundColor(selectedCategory != nil ? .primary : .secondary)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.down")
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+            }
+            .padding(8)
+            .background(Color(UIColor.quaternarySystemFill))
+            .cornerRadius(6)
         }
-        .padding(12)
-        .background(theme.success.opacity(0.1))
-        .cornerRadius(10)
     }
 }
 
-// MARK: - Bottom Toolbar
-struct EditorToolbar: View {
-    @Environment(\.appTheme) private var theme
+// MARK: - Modern Location Card
+struct ModernLocationCard: View {
+    @ObservedObject var viewModel: NoteEditorViewModel
+    
+    var body: some View {
+        if let latitude = viewModel.latitude, let longitude = viewModel.longitude {
+            ModernCard(
+                title: "Location",
+                icon: "location.fill",
+                color: .red.opacity(0.8)
+            ) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(String(format: "%.6f, %.6f", latitude, longitude))
+                            .font(.footnote)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        let urlString = "http://maps.apple.com/?ll=\(latitude),\(longitude)"
+                        if let url = URL(string: urlString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        Image(systemName: "map")
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// AttachmentsCard and related components moved to AttachmentComponents.swift for better organization
+
+
+struct TagChip: View {
+    let text: String
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("#\(text)")
+                .font(.caption)
+                .foregroundColor(.blue)
+            
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(8)
+    }
+}
+
+
+// MARK: - Floating Toolbar
+struct FloatingToolbar: View {
     @ObservedObject var audioManager: AudioManager
     @Binding var showingFileImporter: Bool
     @Binding var showingImagePicker: Bool
-    @Binding var showingAIProcessing: Bool
     let onVoiceRecordingComplete: (URL?, String?) -> Void
     
     var body: some View {
-        HStack(spacing: 20) {
-            // File attachment
-            Button(action: { showingFileImporter = true }) {
-                Image(systemName: "paperclip")
-                    .font(.title2)
-                    .foregroundColor(theme.textPrimary)
+        HStack(spacing: 0) {
+            // Attach button
+            ToolbarButton(
+                icon: "paperclip",
+                label: "Attach",
+                color: .gray
+            ) {
+                showingFileImporter = true
             }
             
-            // Image attachment
-            Button(action: { showingImagePicker = true }) {
-                Image(systemName: "photo")
-                    .font(.title2)
-                    .foregroundColor(theme.textPrimary)
+            // Photo button
+            ToolbarButton(
+                icon: "camera.fill",
+                label: "Photo",
+                color: .blue
+            ) {
+                showingImagePicker = true
             }
             
-            // Voice recording
-            Button(action: {
+            // Voice button
+            ToolbarButton(
+                icon: audioManager.isRecording ? "stop.circle.fill" : "mic.fill",
+                label: audioManager.isRecording ? "Stop" : "Voice",
+                color: audioManager.isRecording ? .red : .green
+            ) {
                 if audioManager.isRecording {
                     audioManager.stopRecording()
-                    // Give a small delay to ensure recording is properly finalized
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         let url = audioManager.getRecordingURL()
                         let transcript = audioManager.currentTranscript.isEmpty ? nil : audioManager.currentTranscript
                         onVoiceRecordingComplete(url, transcript)
-                        audioManager.clearRecorder() // Clear the recorder after handling
+                        audioManager.clearRecorder()
                     }
                 } else {
                     audioManager.startRecording()
                 }
-            }) {
-                Image(systemName: audioManager.isRecording ? "stop.circle.fill" : "mic.circle")
-                    .font(.title2)
-                    .foregroundColor(audioManager.isRecording ? theme.error : theme.textPrimary)
             }
-            
-            Spacer()
         }
-        .padding()
-        .background(theme.background)
-        .overlay(
-            Rectangle()
-                .frame(height: 0.5)
-                .foregroundColor(theme.separator),
-            alignment: .top
+        .background(
+            RoundedRectangle(cornerRadius: 25)
+                .fill(Color(UIColor.systemBackground))
+                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
         )
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+    }
+}
+
+struct ToolbarButton: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                    .foregroundColor(color)
+                Text(label)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        }
     }
 }
 
@@ -786,11 +1324,18 @@ struct LocationSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(
-                title: "Location",
-                icon: "location.fill",
-                color: .green
-            )
+            HStack {
+                Image(systemName: "location.fill")
+                    .foregroundColor(Color.green)
+                    .font(.headline)
+                
+                Text("Location")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color.green)
+                
+                Spacer()
+            }
 
             if let latitude = viewModel.latitude, let longitude = viewModel.longitude {
                 LocationCard(
@@ -896,7 +1441,15 @@ struct LocationCard: View {
     }
 }
 
-// MARK: - Extensions moved to AttachmentComponents.swift
+// MARK: - UIImage Extensions
+private extension UIImage {
+    func resizedForThumbnail(to size: CGSize) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+}
 
 #Preview {
     NoteEditorView()

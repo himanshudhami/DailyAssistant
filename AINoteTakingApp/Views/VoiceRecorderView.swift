@@ -351,12 +351,26 @@ struct AIProcessingView: View {
     
     private func processContent() {
         Task {
+            print("🚀 AI Enhancement: Starting enhanced content processing...")
+            
+            // Use the existing AIProcessor which now supports structured content processing
             let result = await aiProcessor.processContent(content)
+            
             await MainActor.run {
                 processedContent = result
             }
+            
+            print("✅ AI Enhancement: Processing complete")
+            print("📄 Summary: \(result.summary)")
+            print("⚡ Action items: \(result.actionItems.count)")
+            print("🏷️ Tags: \(result.suggestedTags.joined(separator: ", "))")
+            
+            if result.suggestedCategory?.name.lowercased().contains("contact") == true {
+                print("🎯 Business card processing detected!")
+            }
         }
     }
+    
 }
 
 struct ProcessingView: View {

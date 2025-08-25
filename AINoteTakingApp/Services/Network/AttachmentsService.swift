@@ -40,15 +40,17 @@ class AttachmentsService {
     
     private let client: NetworkClient
     private let session: URLSession
+    private let config: AppConfiguration
     
-    private init(client: NetworkClient = .shared) {
+    private init(client: NetworkClient = .shared, config: AppConfiguration = .shared) {
         self.client = client
+        self.config = config
         
         // Configure session for file uploads
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 60
-        config.timeoutIntervalForResource = 300
-        self.session = URLSession(configuration: config)
+        let sessionConfig = URLSessionConfiguration.default
+        sessionConfig.timeoutIntervalForRequest = config.apiTimeout * 2 // Longer timeout for uploads
+        sessionConfig.timeoutIntervalForResource = 300 // Keep longer timeout for large file uploads
+        self.session = URLSession(configuration: sessionConfig)
     }
     
     // MARK: - Upload Operations
@@ -60,12 +62,10 @@ class AttachmentsService {
     ) -> AnyPublisher<Attachment, NetworkError> {
         
         // Backend endpoint: POST /notes/:id/attachments (direct upload with file)
-        guard let baseURL = URL(string: "http://192.168.86.26:8080/api/v1") else {
+        guard let url = config.apiURL(for: "/notes/\(noteId)/attachments") else {
             return Fail(error: NetworkError.invalidURL)
                 .eraseToAnyPublisher()
         }
-        
-        let url = baseURL.appendingPathComponent("/notes/\(noteId)/attachments")
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -150,12 +150,10 @@ class AttachmentsService {
         mimeType: String
     ) -> AnyPublisher<FileUploadResult, NetworkError> {
         
-        guard let baseURL = URL(string: "http://192.168.86.26:8080/api/v1") else {
+        guard let url = config.apiURL(for: "/attachments/upload") else {
             return Fail(error: NetworkError.invalidURL)
                 .eraseToAnyPublisher()
         }
-        
-        let url = baseURL.appendingPathComponent("/attachments/upload")
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -296,12 +294,10 @@ class AttachmentsService {
     // MARK: - Download Operations
     
     func downloadAttachment(_ attachment: Attachment) -> AnyPublisher<URL, NetworkError> {
-        guard let baseURL = URL(string: "http://192.168.86.26:8080/api/v1") else {
+        guard let url = config.apiURL(for: "/attachments/\(attachment.id)/download") else {
             return Fail(error: NetworkError.invalidURL)
                 .eraseToAnyPublisher()
         }
-        
-        let url = baseURL.appendingPathComponent("/attachments/\(attachment.id)/download")
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

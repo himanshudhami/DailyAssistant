@@ -45,13 +45,13 @@ struct AppConfiguration {
         switch AppEnvironment.current {
         case .development:
             // For local development, you can use localhost or a dev server
-            return "http://192.168.86.26:8080/api/v1"
+            return "https://noteapi.xcdify.com/api/v1"
             
         case .staging:
-            return "https://staging-api.mynotes.app/api/v1"
+            return "https://noteapi.xcdify.com/api/v1"
             
         case .production:
-            return "https://api.mynotes.app/api/v1"
+            return "https://noteapi.xcdify.com/api/v1"
         }
     }
     
