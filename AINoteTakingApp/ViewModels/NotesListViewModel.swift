@@ -126,6 +126,10 @@ class NotesListViewModel: ObservableObject {
     }
     
     func updateNote(_ note: Note) {
+        // Get the original note to check what changed
+        let originalNote = notes.first { $0.id == note.id }
+        
+        // Update locally first
         dataManager.updateNote(note)
         if let index = self.notes.firstIndex(where: { $0.id == note.id }) {
             self.notes[index] = note
@@ -135,6 +139,52 @@ class NotesListViewModel: ObservableObject {
             category: self.selectedCategory,
             sortOption: self.sortOption
         )
+        
+        // Check if note is saved on server and sync changes
+        if let serverID = dataManager.getServerID(for: note.id) {
+            // Determine what fields changed
+            var fieldsToUpdate: [String: Any?] = [:]
+            
+            if originalNote?.title != note.title {
+                fieldsToUpdate["title"] = note.title
+            }
+            if originalNote?.content != note.content {
+                fieldsToUpdate["content"] = note.content
+            }
+            if originalNote?.tags != note.tags {
+                fieldsToUpdate["tags"] = note.tags
+            }
+            if originalNote?.folderId != note.folderId {
+                fieldsToUpdate["folderId"] = note.folderId
+            }
+            if originalNote?.category?.id != note.category?.id {
+                fieldsToUpdate["categoryId"] = note.category?.id
+            }
+            
+            // Only sync if something actually changed
+            if !fieldsToUpdate.isEmpty {
+                networkService.notes.updateNote(
+                    serverID,
+                    title: fieldsToUpdate["title"] as? String,
+                    content: fieldsToUpdate["content"] as? String,
+                    tags: fieldsToUpdate["tags"] as? [String],
+                    folderId: fieldsToUpdate["folderId"] as? UUID,
+                    categoryId: fieldsToUpdate["categoryId"] as? UUID
+                )
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            print("❌ Failed to sync note changes to backend: \(error)")
+                            // Could implement retry logic or show error to user
+                        }
+                    },
+                    receiveValue: { updatedNote in
+                        print("✅ Note changes synced to backend: \(updatedNote.title)")
+                    }
+                )
+                .store(in: &cancellables)
+            }
+        }
     }
     
     
@@ -142,6 +192,23 @@ class NotesListViewModel: ObservableObject {
     func createCategory(name: String, color: String) {
         let newCategory = dataManager.createCategory(name: name, color: color)
         self.categories.append(newCategory)
+        
+        // Also send to backend
+        networkService.categories.createCategory(name: name, color: color)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to create category on backend: \(error)")
+                        // Note: Category already created locally, so UI shows it
+                        // Could implement retry logic here
+                    }
+                },
+                receiveValue: { backendCategory in
+                    print("✅ Category created on backend: \(backendCategory.name)")
+                    // Could update local category with backend ID if needed
+                }
+            )
+            .store(in: &cancellables)
     }
     
     // MARK: - Statistics
@@ -225,6 +292,23 @@ class NotesListViewModel: ObservableObject {
         let newFolder = dataManager.createFolder(name: name, parentFolder: parentFolder)
         folders.append(newFolder)
         updateFolderHierarchy()
+        
+        // Also send to backend
+        networkService.folders.createFolder(newFolder)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to create folder on backend: \(error)")
+                        // Note: Folder already created locally, so UI shows it
+                        // Could implement retry logic here
+                    }
+                },
+                receiveValue: { backendFolder in
+                    print("✅ Folder created on backend: \(backendFolder.name)")
+                    // Could update local folder with backend ID if needed
+                }
+            )
+            .store(in: &cancellables)
     }
     
     func deleteFolder(_ folder: Folder, cascadeDelete: Bool = true) {
