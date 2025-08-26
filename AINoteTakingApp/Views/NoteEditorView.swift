@@ -96,14 +96,6 @@ struct NoteEditorView: View {
                 
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
-                        // Cloud indicator for server save status
-                        if viewModel.isSavedOnServer {
-                            Image(systemName: "checkmark.icloud.fill")
-                                .foregroundColor(.green)
-                                .font(.system(size: 18))
-                                .help("Saved to server")
-                        }
-                        
                         if viewModel.hasContent {
                             Button {
                                 showingAIProcessing = true
@@ -117,12 +109,13 @@ struct NoteEditorView: View {
                             .disabled(viewModel.isProcessing)
                         }
                         
-                        Button(viewModel.isSaving ? "Saving..." : "Save") {
-                            saveAndDismiss()
-                        }
-                        .fontWeight(.semibold)
-                        .foregroundColor(.blue)
-                        .disabled(!viewModel.hasContent || viewModel.isSaving)
+                        // Improved Save button with status indicator (from feedback)
+                        ImprovedSaveButton(
+                            isSaving: viewModel.isSaving,
+                            isSavedOnServer: viewModel.isSavedOnServer,
+                            hasContent: viewModel.hasContent,
+                            onSave: saveAndDismiss
+                        )
                     }
                 }
             }
@@ -359,69 +352,26 @@ struct TabContentView: View {
 // MARK: - Modern AI Content Section
 struct ModernAIContentSection: View {
     @ObservedObject var viewModel: NoteEditorViewModel
+    @Environment(\.appTheme) private var theme
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "sparkles")
-                    .foregroundColor(.green)
-                    .font(.headline)
-                Text("AI Insights")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-            .padding(.bottom, 4)
+        VStack(alignment: .leading, spacing: AppConstants.Spacing.md) {
+            // Removed redundant "AI Insights" header as per feedback
+            // The content speaks for itself, no need for double labeling
             
-            // AI Summary
+            // AI Summary - Restructured based on feedback
             if let aiSummary = viewModel.aiSummary, !aiSummary.isEmpty {
-                ModernCard(
-                    title: "Summary",
-                    icon: "doc.text",
-                    color: .green.opacity(0.8)
-                ) {
-                    Text(aiSummary)
-                        .font(.body)
-                        .foregroundColor(.primary)
-                }
+                ImprovedSummaryCard(summary: aiSummary, theme: theme)
             }
             
-            // Key Points
+            // Key Points - Improved with meaningful icons
             if !viewModel.keyPoints.isEmpty {
-                ModernCard(
-                    title: "Key Points",
-                    icon: "list.bullet",
-                    color: .blue.opacity(0.8)
-                ) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(viewModel.keyPoints, id: \.self) { point in
-                            HStack(alignment: .top, spacing: 8) {
-                                Circle()
-                                    .fill(Color.blue)
-                                    .frame(width: 6, height: 6)
-                                    .padding(.top, 6)
-                                Text(point)
-                                    .font(.body)
-                                    .foregroundColor(.primary)
-                            }
-                        }
-                    }
-                }
+                ImprovedKeyPointsCard(keyPoints: viewModel.keyPoints, theme: theme)
             }
             
-            // Action Items
+            // Action Items - Improved interactivity
             if !viewModel.actionItems.isEmpty {
-                ModernCard(
-                    title: "Action Items",
-                    icon: "checkmark.circle",
-                    color: .orange.opacity(0.8)
-                ) {
-                    VStack(spacing: 8) {
-                        ForEach(viewModel.actionItems.indices, id: \.self) { index in
-                            ModernActionItemRow(actionItem: $viewModel.actionItems[index])
-                        }
-                    }
-                }
+                ImprovedActionItemsCard(actionItems: $viewModel.actionItems, theme: theme)
             }
         }
     }
@@ -1152,7 +1102,300 @@ struct ModernLocationCard: View {
     }
 }
 
+// MARK: - Improved AI Cards (Based on Feedback)
 
+struct ImprovedSummaryCard: View {
+    let summary: String
+    let theme: DefaultAppTheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppConstants.Spacing.sm) {
+            // Header with semantic icon
+            HStack(spacing: AppConstants.Spacing.sm) {
+                Image(systemName: AppConstants.Icons.summary)
+                    .foregroundColor(theme.success)
+                    .font(TypographyScale.sectionHeader)
+                
+                Text("Summary")
+                    .font(TypographyScale.sectionHeader)
+                    .foregroundColor(theme.contentColor)
+            }
+            
+            // Parse summary into structured data if it contains contact info
+            if summary.contains("CONTACT") || summary.contains("COMPANY") {
+                StructuredSummaryView(summary: summary, theme: theme)
+            } else {
+                // Regular summary text
+                Text(summary)
+                    .font(TypographyScale.body)
+                    .foregroundColor(theme.contentColor)
+            }
+        }
+        .padding(AppConstants.Spacing.md)
+        .background(theme.cardBackground)
+        .cornerRadius(AppConstants.UI.cornerRadius)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct StructuredSummaryView: View {
+    let summary: String
+    let theme: DefaultAppTheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppConstants.Spacing.md) {
+            // Business Card indicator
+            HStack(spacing: AppConstants.Spacing.sm) {
+                Image(systemName: AppConstants.Icons.businessCard)
+                    .foregroundColor(theme.info)
+                    .font(TypographyScale.caption)
+                
+                Text("BUSINESS CARD")
+                    .font(TypographyScale.fieldLabel)
+                    .foregroundColor(theme.labelColor)
+            }
+            
+            // Extract and display structured contact info
+            let contactInfo = extractContactInfo(from: summary)
+            if !contactInfo.isEmpty {
+                VStack(alignment: .leading, spacing: AppConstants.Spacing.sm) {
+                    ForEach(contactInfo, id: \.label) { info in
+                        ContactDisplayRow(
+                            icon: info.icon,
+                            label: info.label,
+                            value: info.value,
+                            theme: theme
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func extractContactInfo(from text: String) -> [ContactDisplayInfo] {
+        var results: [ContactDisplayInfo] = []
+        
+        // Simple pattern matching - can be enhanced
+        if let name = extractValue(from: text, after: "CONTACT") {
+            results.append(ContactDisplayInfo(
+                icon: AppConstants.Icons.contact,
+                label: "CONTACT",
+                value: name
+            ))
+        }
+        
+        if let company = extractValue(from: text, after: "COMPANY") {
+            results.append(ContactDisplayInfo(
+                icon: AppConstants.Icons.company,
+                label: "COMPANY", 
+                value: company
+            ))
+        }
+        
+        // Add phone extraction logic
+        let phoneRegex = try? NSRegularExpression(pattern: "\\+?[1-9]\\d{1,14}")
+        if let phoneMatch = phoneRegex?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+            let phone = String(text[Range(phoneMatch.range, in: text)!])
+            results.append(ContactDisplayInfo(
+                icon: AppConstants.Icons.phone,
+                label: "PHONE",
+                value: phone
+            ))
+        }
+        
+        return results
+    }
+    
+    private func extractValue(from text: String, after keyword: String) -> String? {
+        let components = text.components(separatedBy: "|")
+        for component in components {
+            let trimmed = component.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix(keyword) {
+                return String(trimmed.dropFirst(keyword.count + 1).trimmingCharacters(in: .whitespaces))
+            }
+        }
+        return nil
+    }
+}
+
+struct ContactDisplayInfo {
+    let icon: String
+    let label: String
+    let value: String
+}
+
+struct ContactDisplayRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    let theme: DefaultAppTheme
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: AppConstants.Spacing.sm) {
+            Image(systemName: icon)
+                .foregroundColor(theme.primary)
+                .font(TypographyScale.caption)
+                .frame(width: 16)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(TypographyScale.fieldLabel)
+                    .foregroundColor(theme.labelColor)
+                
+                Text(value)
+                    .font(TypographyScale.content)
+                    .foregroundColor(theme.contentColor)
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+struct ImprovedKeyPointsCard: View {
+    let keyPoints: [String]
+    let theme: DefaultAppTheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppConstants.Spacing.sm) {
+            // Header
+            HStack(spacing: AppConstants.Spacing.sm) {
+                Image(systemName: AppConstants.Icons.keyPoint)
+                    .foregroundColor(theme.info)
+                    .font(TypographyScale.sectionHeader)
+                
+                Text("Key Points")
+                    .font(TypographyScale.sectionHeader)
+                    .foregroundColor(theme.contentColor)
+            }
+            
+            // Key points with meaningful icons instead of dots
+            VStack(alignment: .leading, spacing: AppConstants.Spacing.sm) {
+                ForEach(Array(keyPoints.enumerated()), id: \.offset) { index, point in
+                    HStack(alignment: .top, spacing: AppConstants.Spacing.sm) {
+                        Image(systemName: AppConstants.Icons.keyPoint)
+                            .foregroundColor(theme.info)
+                            .font(TypographyScale.caption)
+                            .frame(width: 16)
+                        
+                        Text(point)
+                            .font(TypographyScale.body)
+                            .foregroundColor(theme.contentColor)
+                    }
+                }
+            }
+        }
+        .padding(AppConstants.Spacing.md)
+        .background(theme.cardBackground)
+        .cornerRadius(AppConstants.UI.cornerRadius)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct ImprovedActionItemsCard: View {
+    @Binding var actionItems: [ActionItem]
+    let theme: DefaultAppTheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppConstants.Spacing.sm) {
+            // Header
+            HStack(spacing: AppConstants.Spacing.sm) {
+                Image(systemName: AppConstants.Icons.actionItem)
+                    .foregroundColor(theme.warning)
+                    .font(TypographyScale.sectionHeader)
+                
+                Text("Action Items")
+                    .font(TypographyScale.sectionHeader)
+                    .foregroundColor(theme.contentColor)
+            }
+            
+            // Action items with improved interactivity
+            VStack(spacing: AppConstants.Spacing.sm) {
+                ForEach(actionItems.indices, id: \.self) { index in
+                    ImprovedActionItemRow(
+                        actionItem: $actionItems[index],
+                        theme: theme
+                    )
+                }
+            }
+        }
+        .padding(AppConstants.Spacing.md)
+        .background(theme.cardBackground)
+        .cornerRadius(AppConstants.UI.cornerRadius)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+}
+
+struct ImprovedActionItemRow: View {
+    @Binding var actionItem: ActionItem
+    let theme: DefaultAppTheme
+    
+    var body: some View {
+        HStack(spacing: AppConstants.Spacing.sm) {
+            // Checkbox
+            Button(action: {
+                actionItem.completed.toggle()
+            }) {
+                Image(systemName: actionItem.completed ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(actionItem.completed ? theme.success : theme.labelColor)
+                    .font(TypographyScale.content)
+            }
+            
+            // Action text
+            Text(actionItem.title)
+                .font(TypographyScale.body)
+                .foregroundColor(actionItem.completed ? theme.labelColor : theme.contentColor)
+                .strikethrough(actionItem.completed)
+            
+            Spacer()
+            
+            // Add button (clearer affordance as suggested)
+            Button(action: {
+                // Handle add action - could open detail view or perform action
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Add")
+                }
+                .font(TypographyScale.caption)
+                .foregroundColor(theme.primary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Improved Save Button (From Feedback)
+
+struct ImprovedSaveButton: View {
+    let isSaving: Bool
+    let isSavedOnServer: Bool
+    let hasContent: Bool
+    let onSave: () -> Void
+    
+    var body: some View {
+        Button(action: onSave) {
+            HStack(spacing: 4) {
+                if isSaving {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(0.7)
+                    Text("Saving...")
+                } else if isSavedOnServer {
+                    Image(systemName: AppConstants.Icons.saved)
+                        .foregroundColor(.green)
+                    Text("Saved")
+                        .foregroundColor(.green)
+                } else {
+                    Text("Save")
+                        .foregroundColor(.blue)
+                }
+            }
+            .font(TypographyScale.buttonText)
+        }
+        .disabled(!hasContent || isSaving)
+    }
+}
 
 // AttachmentsCard and related components moved to AttachmentComponents.swift for better organization
 

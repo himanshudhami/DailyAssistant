@@ -130,6 +130,19 @@ struct AppConstants {
         static let location = "location.fill"
         static let cloud = "icloud.fill"
         static let sync = "arrow.triangle.2.circlepath"
+        
+        // MARK: - Semantic Icons (from feedback - replace generic dots)
+        static let contact = "person.fill"
+        static let company = "building.2.fill"
+        static let phone = "phone.fill"
+        static let email = "envelope.fill"
+        static let website = "globe"
+        static let address = "location.fill"
+        static let businessCard = "person.text.rectangle"
+        static let keyPoint = "key.fill"
+        static let actionItem = "checkmark.circle"
+        static let summary = "doc.text"
+        static let saved = "checkmark.icloud.fill"
     }
     
     // MARK: - UserDefaults Keys
@@ -295,6 +308,35 @@ enum AppTheme: String, CaseIterable {
     }
 }
 
+// MARK: - Typography Scale
+struct TypographyScale {
+    // Based on feedback: Establish clear type hierarchy
+    
+    // Headings (e.g., "Summary") - Semibold, 17pt
+    static let sectionHeader: Font = .system(size: 17, weight: .semibold)
+    
+    // Labels (e.g., "CONTACT") - Regular, 13pt, gray color
+    static let fieldLabel: Font = .system(size: 13, weight: .regular)
+    
+    // Content (e.g., "John Doe") - Regular, 17pt, primary white color
+    static let content: Font = .system(size: 17, weight: .regular)
+    
+    // Body Text (e.g., raw text) - Regular, 15pt
+    static let body: Font = .system(size: 15, weight: .regular)
+    
+    // Small labels and metadata
+    static let caption: Font = .system(size: 12, weight: .regular)
+    
+    // Navigation and buttons
+    static let buttonText: Font = .system(size: 16, weight: .medium)
+    
+    // Note titles in lists
+    static let noteTitle: Font = .system(size: 16, weight: .semibold)
+    
+    // Preview text
+    static let preview: Font = .system(size: 14, weight: .regular)
+}
+
 // MARK: - Theme System
 protocol AppThemeProtocol {
     var primary: Color { get }
@@ -312,6 +354,10 @@ protocol AppThemeProtocol {
     var cardBackground: Color { get }
     var sectionBackground: Color { get }
     var separator: Color { get }
+    
+    // Typography colors (as per feedback)
+    var labelColor: Color { get } // For field labels like "CONTACT"
+    var contentColor: Color { get } // For main content like "John Doe"
 }
 
 struct DefaultAppTheme: AppThemeProtocol {
@@ -330,6 +376,10 @@ struct DefaultAppTheme: AppThemeProtocol {
     let cardBackground = Color(.systemBackground)
     let sectionBackground = Color(.systemGray6)
     let separator = Color(.separator)
+    
+    // Typography colors (from feedback)
+    let labelColor = Color(.secondaryLabel) // Light gray for field labels
+    let contentColor = Color.primary // Primary color for main content
 }
 
 @MainActor

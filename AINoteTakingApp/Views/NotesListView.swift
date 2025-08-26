@@ -386,45 +386,44 @@ struct UniformNoteCard: View {
                 
                 Spacer()
                 
-                HStack(spacing: 8) {
+                HStack(spacing: AppConstants.Spacing.sm) {
                     // Cloud indicator for server save status
                     if note.isSavedOnServer {
-                        Image(systemName: "checkmark.icloud.fill")
-                            .font(.caption)
-                            .foregroundColor(.green)
+                        Image(systemName: AppConstants.Icons.saved)
+                            .font(TypographyScale.caption)
+                            .foregroundColor(theme.success)
                     }
                     
-                    // Folder indicator
+                    // Folder indicator with improved styling
                     if let folderId = note.folderId,
                        let folder = viewModel.folders.first(where: { $0.id == folderId }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "folder.fill")
-                                .font(.caption2)
+                        HStack(spacing: AppConstants.Spacing.xs) {
+                            Image(systemName: AppConstants.Icons.folder)
+                                .font(TypographyScale.caption)
                             Text(folder.name)
-                                .font(.caption2)
+                                .font(TypographyScale.caption)
                         }
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 6)
+                        .foregroundColor(theme.labelColor)
+                        .padding(.horizontal, AppConstants.Spacing.sm)
                         .padding(.vertical, 2)
-                        .background(Color(.systemGray6))
+                        .background(theme.sectionBackground)
                         .clipShape(Capsule())
                     }
                 }
             }
             
-            // Title (flexible height)
+            // Title (flexible height) - Updated with new typography
             Text(note.title.isEmpty ? "Untitled" : note.title)
-                .font(.headline)
-                .fontWeight(.semibold)
+                .font(TypographyScale.noteTitle)
                 .lineLimit(2)
-                .foregroundColor(theme.textPrimary)
+                .foregroundColor(theme.contentColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
             
-            // Content preview (flexible height)
+            // Content preview (flexible height) - Updated with new typography
             Text(note.content.isEmpty ? "No content" : note.content)
-                .font(.body)
+                .font(TypographyScale.preview)
                 .lineLimit(2)
-                .foregroundColor(theme.textSecondary)
+                .foregroundColor(theme.labelColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
             
             Spacer(minLength: 4)
@@ -452,32 +451,31 @@ struct NoteListRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(note.title.isEmpty ? "Untitled" : note.title)
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(TypographyScale.noteTitle)
                         .lineLimit(1)
-                        .foregroundColor(theme.textPrimary)
+                        .foregroundColor(theme.contentColor)
                     
                     Spacer()
                     
-                    HStack(spacing: 8) {
+                    HStack(spacing: AppConstants.Spacing.sm) {
                         // Cloud indicator for server save status
                         if note.isSavedOnServer {
-                            Image(systemName: "checkmark.icloud.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                            Image(systemName: AppConstants.Icons.saved)
+                                .font(TypographyScale.caption)
+                                .foregroundColor(theme.success)
                         }
                         
                         Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundColor(theme.textSecondary)
+                            .font(TypographyScale.caption)
+                            .foregroundColor(theme.labelColor)
                     }
                 }
                 
                 if !note.content.isEmpty {
                     Text(note.content)
-                        .font(.body)
+                        .font(TypographyScale.preview)
                         .lineLimit(2)
-                        .foregroundColor(theme.textSecondary)
+                        .foregroundColor(theme.labelColor)
                 }
                 
                 HStack {
@@ -534,8 +532,8 @@ struct NoteCardHeader: View {
             }
             
             Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
-                .font(.caption)
-                .foregroundColor(theme.textSecondary)
+                .font(TypographyScale.caption)
+                .foregroundColor(theme.labelColor)
         }
     }
 }
@@ -551,18 +549,18 @@ struct NoteCardFooter: View {
                 HStack(spacing: 4) {
                     ForEach(note.tags.prefix(2), id: \.self) { tag in
                         Text("#\(tag)")
-                            .font(.caption2)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
+                            .font(TypographyScale.caption)
+                            .padding(.horizontal, AppConstants.Spacing.xs)
+                            .padding(.vertical, 2)
                             .background(theme.primary.opacity(0.1))
                             .foregroundColor(theme.primary)
-                            .cornerRadius(3)
+                            .cornerRadius(AppConstants.UI.cornerRadius / 3)
                     }
                     
                     if note.tags.count > 2 {
                         Text("+\(note.tags.count - 2)")
-                            .font(.caption2)
-                            .foregroundColor(theme.textSecondary)
+                            .font(TypographyScale.caption)
+                            .foregroundColor(theme.labelColor)
                     }
                     
                     Spacer()
@@ -581,13 +579,13 @@ struct CategoryTag: View {
     
     var body: some View {
         Text(category.name)
-            .font(.caption)
+            .font(TypographyScale.caption)
             .fontWeight(.medium)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, AppConstants.Spacing.sm)
+            .padding(.vertical, AppConstants.Spacing.xs)
             .background(Color(hex: category.color).opacity(0.2))
             .foregroundColor(Color(hex: category.color))
-            .cornerRadius(6)
+            .cornerRadius(AppConstants.UI.cornerRadius / 2)
     }
 }
 
@@ -596,37 +594,52 @@ struct NoteIndicators: View {
     let note: Note
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: AppConstants.Spacing.xs) {
+            // Audio indicator with semantic icon
             if note.audioURL != nil {
                 HStack(spacing: 2) {
-                    Image(systemName: "waveform")
-                        .font(.caption2)
+                    Image(systemName: AppConstants.Icons.microphone)
+                        .font(TypographyScale.caption)
                         .foregroundColor(theme.warning)
                     Text("Audio")
-                        .font(.caption2)
-                        .foregroundColor(theme.warning)
+                        .font(TypographyScale.caption)
+                        .foregroundColor(theme.labelColor)
                 }
             }
             
+            // Attachment indicator with count
             if !note.attachments.isEmpty {
                 HStack(spacing: 2) {
-                    Image(systemName: "paperclip")
-                        .font(.caption2)
-                        .foregroundColor(theme.textSecondary)
+                    Image(systemName: AppConstants.Icons.attachment)
+                        .font(TypographyScale.caption)
+                        .foregroundColor(theme.info)
                     Text("\(note.attachments.count)")
-                        .font(.caption2)
-                        .foregroundColor(theme.textSecondary)
+                        .font(TypographyScale.caption)
+                        .foregroundColor(theme.labelColor)
                 }
             }
             
+            // Action items indicator
             if !note.actionItems.isEmpty {
                 HStack(spacing: 2) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.caption2)
+                    Image(systemName: AppConstants.Icons.actionItem)
+                        .font(TypographyScale.caption)
                         .foregroundColor(theme.success)
                     Text("\(note.actionItems.count)")
-                        .font(.caption2)
+                        .font(TypographyScale.caption)
+                        .foregroundColor(theme.labelColor)
+                }
+            }
+            
+            // AI Summary indicator (from feedback - meaningful icon)
+            if note.aiSummary != nil {
+                HStack(spacing: 2) {
+                    Image(systemName: AppConstants.Icons.ai)
+                        .font(TypographyScale.caption)
                         .foregroundColor(theme.success)
+                    Text("AI")
+                        .font(TypographyScale.caption)
+                        .foregroundColor(theme.labelColor)
                 }
             }
 
