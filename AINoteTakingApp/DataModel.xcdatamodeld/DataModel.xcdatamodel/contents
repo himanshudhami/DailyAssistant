@@ -17,6 +17,7 @@
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="localURL" optional="YES" attributeType="URI"/>
         <attribute name="mimeType" optional="YES" attributeType="String"/>
+        <attribute name="serverID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="thumbnailData" optional="YES" attributeType="Binary"/>
         <attribute name="type" optional="YES" attributeType="String"/>
         <relationship name="note" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="NoteEntity" inverseName="attachments" inverseEntity="NoteEntity"/>
@@ -52,6 +53,7 @@
         <attribute name="longitude" optional="YES" attributeType="Double" defaultValue="0" usesScalarValueType="YES"/>
         <attribute name="modifiedDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="ocrText" optional="YES" attributeType="String"/>
+        <attribute name="serverID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="tags" optional="YES" attributeType="String"/>
         <attribute name="title" optional="YES" attributeType="String"/>
         <attribute name="transcript" optional="YES" attributeType="String"/>

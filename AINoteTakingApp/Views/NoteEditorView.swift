@@ -96,6 +96,14 @@ struct NoteEditorView: View {
                 
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
+                        // Cloud indicator for server save status
+                        if viewModel.isSavedOnServer {
+                            Image(systemName: "checkmark.icloud.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 18))
+                                .help("Saved to server")
+                        }
+                        
                         if viewModel.hasContent {
                             Button {
                                 showingAIProcessing = true

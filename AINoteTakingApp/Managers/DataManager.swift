@@ -528,3 +528,58 @@ extension DataManager {
         }
     }
 }
+
+// MARK: - Server ID Management (Simple)
+extension DataManager {
+    
+    func getServerID(for localNoteID: UUID) -> UUID? {
+        let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", localNoteID as CVarArg)
+        
+        guard let entity = try? context.fetch(request).first else {
+            return nil
+        }
+        
+        return entity.serverID
+    }
+    
+    func setServerID(_ serverID: UUID, for localNoteID: UUID) {
+        let request: NSFetchRequest<NoteEntity> = NoteEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", localNoteID as CVarArg)
+        
+        guard let entity = try? context.fetch(request).first else {
+            return
+        }
+        
+        entity.serverID = serverID
+        save()
+    }
+    
+    func isNoteSavedOnServer(_ noteID: UUID) -> Bool {
+        return getServerID(for: noteID) != nil
+    }
+    
+    // For attachments
+    func getAttachmentServerID(for localAttachmentID: UUID) -> UUID? {
+        let request: NSFetchRequest<AttachmentEntity> = AttachmentEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", localAttachmentID as CVarArg)
+        
+        guard let entity = try? context.fetch(request).first else {
+            return nil
+        }
+        
+        return entity.serverID
+    }
+    
+    func setAttachmentServerID(_ serverID: UUID, for localAttachmentID: UUID) {
+        let request: NSFetchRequest<AttachmentEntity> = AttachmentEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", localAttachmentID as CVarArg)
+        
+        guard let entity = try? context.fetch(request).first else {
+            return
+        }
+        
+        entity.serverID = serverID
+        save()
+    }
+}

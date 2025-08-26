@@ -49,6 +49,7 @@ class NoteEditorViewModel: ObservableObject {
     @Published var isProcessing = false
     @Published var isSaving = false
     @Published var errorMessage: String?
+    @Published var isSavedOnServer = false  // Track if note is saved on server
     
     // MARK: - Computed Properties
     var isNewNote: Bool {
@@ -117,6 +118,9 @@ class NoteEditorViewModel: ObservableObject {
         ocrText = note.ocrText
         latitude = note.latitude
         longitude = note.longitude
+        
+        // Check if this note is already saved on server
+        isSavedOnServer = dataManager.isNoteSavedOnServer(note.id)
     }
     
     private func setupAutoSave() {
@@ -189,20 +193,20 @@ class NoteEditorViewModel: ObservableObject {
             
             // For existing notes, check if already synced. For new notes, always create.
             let noteToCheck = originalNote ?? note
-            let isExistingNote = originalNote != nil
-            let isAlreadySynced = isNoteSyncedToBackend(noteToCheck)
             
-            print("📊 Save decision: isExisting=\(isExistingNote), isAlreadySynced=\(isAlreadySynced)")
+            // Simple logic: Check if note has server ID in Core Data
+            let serverID = dataManager.getServerID(for: noteToCheck.id)
+            
+            print("📊 Save decision: serverID=\(serverID?.uuidString ?? "none")")
             
             // Create a single-use cancellable for this operation
             var saveCancellable: AnyCancellable?
             
-            if isExistingNote && isAlreadySynced {
-                // Update existing note that exists on backend
-                let backendId = getBackendNoteId(noteToCheck)
-                print("🔄 Updating existing backend note: \(backendNote.title) (Backend ID: \(backendId))")
+            if let serverID = serverID {
+                // Note exists on server - update it
+                print("🔄 Updating existing backend note: \(backendNote.title) (Server ID: \(serverID))")
                 saveCancellable = networkService.notes.updateNote(
-                    backendId,
+                    serverID,
                     title: backendNote.title,
                     content: backendNote.content,
                     tags: backendNote.tags,
@@ -263,60 +267,37 @@ class NoteEditorViewModel: ObservableObject {
     }
     
     private func isNoteSyncedToBackend(_ note: Note) -> Bool {
-        // Check if this note has been synced to backend before
-        let syncKey = "synced_note_\(note.id)"
-        let hasSyncFlag = UserDefaults.standard.bool(forKey: syncKey)
-        
-        // Also check if we have a backend ID mapping for this note
-        let mappingKey = "backend_id_\(note.id)"
-        let hasMapping = UserDefaults.standard.string(forKey: mappingKey) != nil
-        
-        let isSynced = hasSyncFlag || hasMapping
-        print("🔍 Sync check for note \(note.id): syncFlag=\(hasSyncFlag), hasMapping=\(hasMapping), result=\(isSynced)")
-        
-        return isSynced
+        // Use Core Data to check if note has server ID
+        return dataManager.isNoteSavedOnServer(note.id)
     }
     
     private func markNoteAsSynced(_ note: Note) {
-        let key = "synced_note_\(note.id)"
-        UserDefaults.standard.set(true, forKey: key)
+        // Store server ID in Core Data
+        dataManager.setServerID(note.id, for: note.id)
     }
     
     private func getBackendNoteId(_ localNote: Note) -> UUID {
-        // First check if we have a stored mapping for this local note
-        let mappingKey = "backend_id_\(localNote.id)"
-        if let backendIdString = UserDefaults.standard.string(forKey: mappingKey),
-           let backendId = UUID(uuidString: backendIdString) {
-            return backendId
-        }
-        
-        // If no mapping exists, use the local ID (for notes that were updated directly)
-        return localNote.id
+        // Get server ID from Core Data, fallback to local ID if not found
+        return dataManager.getServerID(for: localNote.id) ?? localNote.id
     }
     
     private func updateLocalNoteWithBackendInfo(_ backendNote: Note) async {
         await MainActor.run {
-            // If this was a new note creation, the backend note will have a different ID
-            // We need to track this mapping for future updates
+            // Store server ID in Core Data for future updates
             if let originalNote = self.originalNote {
-                // This was an update - mark the original note as synced
-                self.markNoteAsSynced(originalNote)
+                // This was an update - store server ID if not already stored
+                self.dataManager.setServerID(backendNote.id, for: originalNote.id)
+                self.isSavedOnServer = true
             } else {
-                // This was a new note creation - the backend assigned a new ID
-                print("📝 New note created: Local ID \(self.createNoteFromCurrentData().id) → Backend ID \(backendNote.id)")
-                
-                // Store the mapping between local ID and backend ID for future reference
+                // This was a new note creation - store the server ID
                 let localNoteId = self.createNoteFromCurrentData().id
                 let backendId = backendNote.id
                 
-                // Mark as synced using backend ID
-                self.markNoteAsSynced(backendNote)
+                // Store server ID in Core Data
+                self.dataManager.setServerID(backendId, for: localNoteId)
+                self.isSavedOnServer = true
                 
-                // Also store mapping for future updates
-                let mappingKey = "backend_id_\(localNoteId)"
-                UserDefaults.standard.set(backendId.uuidString, forKey: mappingKey)
-                
-                print("✅ Note sync mapping stored: \(localNoteId) → \(backendId)")
+                print("✅ Note server ID stored: local:\(localNoteId) → server:\(backendId)")
             }
         }
     }
@@ -351,7 +332,18 @@ class NoteEditorViewModel: ObservableObject {
         
         return try await withCheckedThrowingContinuation { continuation in
             let uploads = originalAttachments.compactMap { attachment -> AnyPublisher<Attachment, NetworkError>? in
-                print("📎 Preparing to upload: \(attachment.fileName)")
+                print("📎 Checking attachment: \(attachment.fileName)")
+                
+                // Check if attachment already has serverID (already uploaded)
+                if let serverID = dataManager.getAttachmentServerID(for: attachment.id) {
+                    print("✅ Attachment already uploaded, skipping: \(attachment.fileName) (Server ID: \(serverID))")
+                    // Return a successful publisher with the existing attachment
+                    return Just(attachment)
+                        .setFailureType(to: NetworkError.self)
+                        .eraseToAnyPublisher()
+                }
+                
+                print("📎 Preparing to upload new attachment: \(attachment.fileName)")
                 
                 // Use FilePathResolver to get the current valid path
                 guard let resolvedURL = FilePathResolver.shared.resolveFileURL(attachment.localURL) else {
@@ -360,7 +352,7 @@ class NoteEditorViewModel: ObservableObject {
                         .eraseToAnyPublisher()
                 }
                 
-                print("📎 Resolved URL: \(resolvedURL)")
+                print("📎 Uploading to server: \(attachment.fileName)")
                 let mimeType = mimeType(for: resolvedURL)
                 
                 return networkService.attachments.uploadAttachment(
@@ -368,6 +360,12 @@ class NoteEditorViewModel: ObservableObject {
                     fileURL: resolvedURL,
                     mimeType: mimeType
                 )
+                .handleEvents(receiveOutput: { uploadedAttachment in
+                    // Store server ID after successful upload
+                    self.dataManager.setAttachmentServerID(uploadedAttachment.id, for: attachment.id)
+                    print("✅ Stored attachment server ID: local:\(attachment.id) → server:\(uploadedAttachment.id)")
+                })
+                .eraseToAnyPublisher()
             }
             
             // Create a single-use cancellable for this upload operation
