@@ -155,6 +155,10 @@ struct Note: Codable, Identifiable, Hashable {
         self.latitude = latitude
         self.longitude = longitude
     }
+    
+    var isSavedOnServer: Bool {
+        return DataManager.shared.isNoteSavedOnServer(self.id)
+    }
 }
 
 // MARK: - Category Model

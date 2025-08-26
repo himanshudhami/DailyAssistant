@@ -386,20 +386,29 @@ struct UniformNoteCard: View {
                 
                 Spacer()
                 
-                // Folder indicator
-                if let folderId = note.folderId,
-                   let folder = viewModel.folders.first(where: { $0.id == folderId }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.fill")
-                            .font(.caption2)
-                        Text(folder.name)
-                            .font(.caption2)
+                HStack(spacing: 8) {
+                    // Cloud indicator for server save status
+                    if note.isSavedOnServer {
+                        Image(systemName: "checkmark.icloud.fill")
+                            .font(.caption)
+                            .foregroundColor(.green)
                     }
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color(.systemGray6))
-                    .clipShape(Capsule())
+                    
+                    // Folder indicator
+                    if let folderId = note.folderId,
+                       let folder = viewModel.folders.first(where: { $0.id == folderId }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.fill")
+                                .font(.caption2)
+                            Text(folder.name)
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(.systemGray6))
+                        .clipShape(Capsule())
+                    }
                 }
             }
             
@@ -450,9 +459,18 @@ struct NoteListRow: View {
                     
                     Spacer()
                     
-                    Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundColor(theme.textSecondary)
+                    HStack(spacing: 8) {
+                        // Cloud indicator for server save status
+                        if note.isSavedOnServer {
+                            Image(systemName: "checkmark.icloud.fill")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                        
+                        Text(note.modifiedDate.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundColor(theme.textSecondary)
+                    }
                 }
                 
                 if !note.content.isEmpty {
