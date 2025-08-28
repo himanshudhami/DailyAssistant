@@ -37,9 +37,8 @@ class StructuredTextExtractor: ObservableObject {
         options: StructuredExtractionOptions = .comprehensive
     ) async -> StructuredTextData {
         
-        // Classify document type first
-        let documentType = options.classifyDocumentType ? 
-            documentAnalyzer.classifyDocumentType(from: text) : .generic
+        // Use generic type - let image classifier and business card processor determine the real type
+        let preliminaryDocumentType = DocumentType.generic
         
         // Extract data based on options and document type
         var contactInfo: ContactInfo?
@@ -53,8 +52,8 @@ class StructuredTextExtractor: ObservableObject {
             print("📞 ContactInfo extracted: phones=\(contactInfo?.phoneNumbers.count ?? 0), emails=\(contactInfo?.emailAddresses.count ?? 0)")
         }
         
-        // Detect business card
-        if options.detectBusinessCard || documentType == .businessCard {
+        // Detect business card ONLY if specifically requested (not for all documents)
+        if options.detectBusinessCard {
             businessCard = businessCardProcessor.detectBusinessCard(from: text, image: image)
             if let bc = businessCard {
                 print("💼 BusinessCard detected: name=\(bc.name?.fullName ?? "nil"), company=\(bc.company ?? "nil")")
@@ -62,6 +61,9 @@ class StructuredTextExtractor: ObservableObject {
                 print("💼 No BusinessCard detected from BusinessCardProcessor")
             }
         }
+        
+        // Final document type: Only override if we actually found business card data
+        let documentType = businessCard != nil ? .businessCard : preliminaryDocumentType
         
         // Analyze document layout
         if options.analyzeLayout {

@@ -50,8 +50,7 @@ class SearchViewModel: ObservableObject {
                     return Calendar.current.isDate(note.modifiedDate, inSameDayAs: Date()) ||
                            Calendar.current.isDate(note.modifiedDate, inSameDayAs: Calendar.current.date(byAdding: .day, value: -1, to: Date())!)
                 case .favorites:
-                    // TODO: Implement favorites functionality
-                    return false
+                    return false // Favorites not implemented
                 case .hasImages:
                     return note.attachments.contains { $0.type == .image }
                 }

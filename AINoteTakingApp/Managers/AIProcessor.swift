@@ -83,17 +83,18 @@ class AIProcessor: ObservableObject {
         // Step 1: Check if this looks like structured content (business card, etc.)
         await updateProgress(0.1)
         let structuredExtractor = StructuredTextExtractor()
-        let quickStructuredData = await structuredExtractor.extractStructuredData(
+        let structuredData = await structuredExtractor.extractStructuredData(
             from: text,
             textBlocks: [],
             image: nil,
-            options: .businessCard // Quick check for business cards
+            options: .comprehensive // Do full extraction once, not twice
         )
         
         // If we detected structured content, use the enhanced processing
-        if structuredContentDetected(structuredData: quickStructuredData) {
+        if structuredContentDetected(structuredData: structuredData) {
             print("🎯 Structured content detected - using enhanced processing")
-            return await processStructuredContent(quickStructuredData, originalText: text)
+            // Pass the already-extracted data to avoid duplicate processing
+            return await processStructuredContentWithData(structuredData, originalText: text)
         }
         
         // Otherwise, use traditional processing
@@ -144,6 +145,12 @@ class AIProcessor: ObservableObject {
     }
     
     // MARK: - Enhanced Processing with Structured Data
+    
+    // New method that uses already-extracted data (avoids duplicate processing)
+    func processStructuredContentWithData(_ structuredData: StructuredTextData, originalText: String) async -> ProcessedContent {
+        return await processStructuredContent(structuredData, originalText: originalText)
+    }
+    
     func processStructuredContent(_ structuredData: StructuredTextData, originalText: String) async -> ProcessedContent {
         isProcessing = true
         processingProgress = 0

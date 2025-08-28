@@ -57,8 +57,7 @@ struct CameraView: UIViewControllerRepresentable {
 }
 
 // MARK: - Camera View with Processing
-// Note: This struct is temporarily moved to NotesListView.swift to avoid circular dependency
-// TODO: Move back to separate file once dependency issues are resolved
+// CameraViewWithProcessing is defined in NotesListView.swift
 
 // MARK: - Processing Overlay
 struct ProcessingOverlay: View {

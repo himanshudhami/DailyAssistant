@@ -34,6 +34,8 @@ struct ImagePreprocessingOptions {
     
     static let `default` = ImagePreprocessingOptions()
     static let minimal = ImagePreprocessingOptions(enhanceContrast: true)
+    static let receipt = ImagePreprocessingOptions(enhanceContrast: true, correctRotation: true)
+    static let businessCard = ImagePreprocessingOptions(enhanceContrast: true, correctRotation: true, sharpenText: true)
 }
 
 /// OCR processing result
@@ -80,13 +82,18 @@ class OCRService: ObservableObject {
     }
     
     /// Performs specialized business card OCR
-    func performBusinessCardOCR(on image: UIImage, options: ImagePreprocessingOptions = .default) async -> OCRResult {
+    func performBusinessCardOCR(on image: UIImage, options: ImagePreprocessingOptions = .businessCard) async -> OCRResult {
         return await performOCR(on: image, options: options, isBusinessCard: true)
+    }
+    
+    /// Performs optimized receipt OCR
+    func performReceiptOCR(on image: UIImage, options: ImagePreprocessingOptions = .receipt) async -> OCRResult {
+        return await performOCR(on: image, options: options, isReceipt: true)
     }
     
     // MARK: - Private Implementation
     
-    private func performOCR(on image: UIImage, options: ImagePreprocessingOptions = .default, isBusinessCard: Bool = false) async -> OCRResult {
+    private func performOCR(on image: UIImage, options: ImagePreprocessingOptions = .default, isBusinessCard: Bool = false, isReceipt: Bool = false) async -> OCRResult {
         isProcessing = true
         processingProgress = 0
         
@@ -99,7 +106,14 @@ class OCRService: ObservableObject {
         
         // Preprocess image for better OCR accuracy
         await MainActor.run { processingProgress = 0.1 }
-        let enhancedOptions = isBusinessCard ? imagePreprocessor.enhanceOptionsForBusinessCard(options) : options
+        let enhancedOptions: ImagePreprocessingOptions
+        if isBusinessCard {
+            enhancedOptions = imagePreprocessor.enhanceOptionsForBusinessCard(options)
+        } else if isReceipt {
+            enhancedOptions = options // Receipts need minimal preprocessing
+        } else {
+            enhancedOptions = options
+        }
         let preprocessedImage = await imagePreprocessor.preprocessImage(image, options: enhancedOptions)
         
         guard let cgImage = preprocessedImage.cgImage else {
@@ -118,7 +132,13 @@ class OCRService: ObservableObject {
                 }
                 
                 Task {
-                    let result = await self.processOCRObservations(observations, imageSize: preprocessedImage.size, preprocessedImage: preprocessedImage, isBusinessCard: isBusinessCard)
+                    let result = await self.processOCRObservations(
+                        observations, 
+                        imageSize: preprocessedImage.size, 
+                        preprocessedImage: preprocessedImage, 
+                        isBusinessCard: isBusinessCard,
+                        isReceipt: isReceipt
+                    )
                     await MainActor.run {
                         self.processingProgress = 1.0
                     }
@@ -144,7 +164,13 @@ class OCRService: ObservableObject {
         }
     }
     
-    private func processOCRObservations(_ observations: [VNRecognizedTextObservation], imageSize: CGSize, preprocessedImage: UIImage, isBusinessCard: Bool = false) async -> OCRResult {
+    private func processOCRObservations(
+        _ observations: [VNRecognizedTextObservation], 
+        imageSize: CGSize, 
+        preprocessedImage: UIImage, 
+        isBusinessCard: Bool = false,
+        isReceipt: Bool = false
+    ) async -> OCRResult {
         var rawText = ""
         var textBlocks: [(text: String, boundingBox: CGRect, confidence: Float)] = []
         
@@ -168,10 +194,14 @@ class OCRService: ObservableObject {
         // Extract structured data using the new services
         let structuredExtractor = StructuredTextExtractor()
         
-        // Use business card optimization if detected or requested
-        var extractionOptions = StructuredExtractionOptions.comprehensive
+        // Use appropriate optimization based on document type
+        var extractionOptions: StructuredExtractionOptions
         if isBusinessCard {
             extractionOptions = .businessCard
+        } else if isReceipt {
+            extractionOptions = .minimal  // Receipts don't need complex extraction
+        } else {
+            extractionOptions = .comprehensive
         }
         
         let structuredData = await structuredExtractor.extractStructuredData(

@@ -13,6 +13,13 @@ struct SettingsView: View {
     @State private var showingAbout = false
     @State private var showingLogoutConfirmation = false
     
+    init() {
+        // Set default value for location capture (enabled by default)
+        if UserDefaults.standard.object(forKey: "enableLocationCapture") == nil {
+            UserDefaults.standard.set(true, forKey: "enableLocationCapture")
+        }
+    }
+    
     var body: some View {
         NavigationView {
             List {
@@ -68,6 +75,25 @@ struct SettingsView: View {
                         Spacer()
                         Text(securityManager.getBiometryTypeString())
                             .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Privacy & Location Section
+                Section("Privacy & Location") {
+                    HStack {
+                        Image(systemName: "location")
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Capture Location Data")
+                            Text("Adds GPS coordinates to camera notes")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { UserDefaults.standard.bool(forKey: "enableLocationCapture") },
+                            set: { UserDefaults.standard.set($0, forKey: "enableLocationCapture") }
+                        ))
                     }
                 }
                 

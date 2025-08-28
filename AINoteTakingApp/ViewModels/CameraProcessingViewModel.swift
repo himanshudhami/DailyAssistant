@@ -113,3 +113,4 @@ class CameraProcessingViewModel: ObservableObject {
         return lastProcessingError != nil
     }
 }
+

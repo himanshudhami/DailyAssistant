@@ -34,14 +34,7 @@ class DocumentLayoutAnalyzer {
             "introduction", "conclusion", "overview", "details", "information"
         ]
         
-        static let documentTypeKeywords = [
-            "notice": ["notice", "announcement", "alert", "warning", "attention"],
-            "form": ["form", "application", "questionnaire", "survey", "registration"],
-            "letter": ["dear", "sincerely", "regards", "yours", "letter"],
-            "flyer": ["event", "join", "register", "rsvp", "admission"],
-            "menu": ["menu", "appetizer", "entree", "dessert", "beverage", "price"],
-            "receipt": ["receipt", "total", "subtotal", "tax", "payment", "change"]
-        ]
+        // REMOVED: documentTypeKeywords - no longer used since we don't classify document types here
     }
     
     // MARK: - Initialization
@@ -96,71 +89,8 @@ class DocumentLayoutAnalyzer {
         )
     }
     
-    func classifyDocumentType(from text: String) -> DocumentType {
-        print("📋 DocumentLayoutAnalyzer: Classifying document type for text: '\(text.prefix(100))...'")
-        
-        let lowercaseText = text.lowercased()
-        var scores: [DocumentType: Int] = [:]
-        
-        // Initialize scores
-        for docType in [DocumentType.notice, .form, .letter, .flyer, .menu, .receipt] {
-            scores[docType] = 0
-        }
-        
-        // Score based on keywords
-        for (docType, keywords) in LayoutPatterns.documentTypeKeywords {
-            let documentType = DocumentType(rawValue: docType) ?? .generic
-            
-            for keyword in keywords {
-                if lowercaseText.contains(keyword) {
-                    scores[documentType, default: 0] += 1
-                }
-            }
-        }
-        
-        // Additional pattern-based scoring
-        
-        // Business card patterns
-        let contactInfo = hasContactInfo(text)
-        let hasPersonName = hasPersonNames(text)
-        let wordCount = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-        
-        print("📋 Business card check: contactInfo=\(contactInfo), hasPersonName=\(hasPersonName), wordCount=\(wordCount)")
-        
-        if contactInfo && hasPersonName && wordCount < 100 {
-            print("📋 DocumentLayoutAnalyzer: Classified as BUSINESS CARD")
-            return .businessCard
-        }
-        
-        // Form patterns
-        if hasFormFields(text) {
-            scores[.form, default: 0] += 3
-        }
-        
-        // Receipt patterns
-        if hasPricePatterns(text) && hasReceiptKeywords(text) {
-            scores[.receipt, default: 0] += 3
-        }
-        
-        // Menu patterns
-        if hasMenuStructure(text) {
-            scores[.menu, default: 0] += 3
-        }
-        
-        // Find the highest scoring document type
-        let bestMatch = scores.max(by: { $0.value < $1.value })
-        
-        print("📋 DocumentLayoutAnalyzer: Final scores: \(scores)")
-        print("📋 DocumentLayoutAnalyzer: Best match: \(bestMatch?.key.rawValue ?? "none") with score \(bestMatch?.value ?? 0)")
-        
-        if let (docType, score) = bestMatch, score >= 2 {
-            print("📋 DocumentLayoutAnalyzer: Classified as \(docType.rawValue.uppercased())")
-            return docType
-        }
-        
-        print("📋 DocumentLayoutAnalyzer: Classified as GENERIC")
-        return .generic
-    }
+    // REMOVED: classifyDocumentType - now handled by DocumentClassifier (image-based)
+    // DocumentLayoutAnalyzer now focuses only on layout analysis
     
     // MARK: - Private Analysis Methods
     private func sortTextBlocks(_ textBlocks: [(text: String, boundingBox: CGRect, confidence: Float)]) -> [(text: String, boundingBox: CGRect, confidence: Float)] {
@@ -512,104 +442,9 @@ class DocumentLayoutAnalyzer {
         return hasContact
     }
     
-    private func hasPersonNames(_ text: String) -> Bool {
-        print("📋 hasPersonNames: Checking text for person names...")
-        
-        // Use the same robust name detection logic as BusinessCardProcessor
-        let lines = text.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        
-        print("📋 hasPersonNames: Processing \(lines.count) lines")
-        
-        // Check last 3 lines for potential names (same strategy as BusinessCardProcessor)
-        for (index, line) in lines.suffix(3).enumerated() {
-            print("📋 hasPersonNames: Checking suffix line \(index): '\(line)'")
-            if let name = parsePersonNameFromLine(line) {
-                print("📋 hasPersonNames: Found name '\(name.fullName)' in suffix")
-                return true
-            }
-        }
-        
-        // Check first 5 lines too (like BusinessCardProcessor Strategy 1)
-        for (index, line) in lines.prefix(5).enumerated() {
-            print("📋 hasPersonNames: Checking prefix line \(index): '\(line)'")
-            if let name = parsePersonNameFromLine(line) {
-                print("📋 hasPersonNames: Found name '\(name.fullName)' in prefix")
-                return true
-            }
-        }
-        
-        print("📋 hasPersonNames: No names found with custom logic, trying NLTagger...")
-        
-        // Fallback: try NLTagger
-        nlTagger.string = text
-        let range = text.startIndex..<text.endIndex
-        
-        var hasNames = false
-        nlTagger.enumerateTags(in: range, unit: .word, scheme: .nameType) { tag, _ in
-            if tag == .personalName {
-                hasNames = true
-                return false
-            }
-            return true
-        }
-        
-        print("📋 hasPersonNames: NLTagger result: \(hasNames)")
-        return hasNames
-    }
+    // REMOVED: hasPersonNames - no longer needed since we don't classify business cards here
     
-    private func parsePersonNameFromLine(_ line: String) -> PersonName? {
-        print("📋 parsePersonNameFromLine: '\(line)'")
-        
-        let words = line.components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-        
-        print("📋   Words: \(words), count: \(words.count)")
-        
-        guard words.count >= 2, words.count <= 4 else { 
-            print("📋   SKIP: Word count not in range 2-4")
-            return nil 
-        }
-        
-        // Check if words look like names (capitalized, alphabetic)
-        let nameWords = words.filter { word in
-            guard let firstChar = word.first else { return false }
-            let isCapitalizedLetter = firstChar.isLetter && firstChar.isUppercase
-            let isAlphabetic = word.allSatisfy { $0.isLetter || $0 == "'" || $0 == "-" || $0 == "." }
-            print("📋     Word '\(word)': firstChar=\(firstChar), isCapitalizedLetter=\(isCapitalizedLetter), isAlphabetic=\(isAlphabetic)")
-            return isCapitalizedLetter && isAlphabetic && word.count >= 2
-        }
-        
-        print("📋   Name words found: \(nameWords), count: \(nameWords.count)")
-        
-        guard nameWords.count >= 2 else { 
-            print("📋   SKIP: Not enough name words")
-            return nil 
-        }
-        
-        // Create PersonName
-        if nameWords.count == 2 {
-            return PersonName(
-                fullName: "\(nameWords[0]) \(nameWords[1])",
-                firstName: nameWords[0],
-                lastName: nameWords[1],
-                prefix: nil,
-                suffix: nil
-            )
-        } else if nameWords.count >= 3 {
-            let fullName = nameWords.joined(separator: " ")
-            return PersonName(
-                fullName: fullName,
-                firstName: nameWords[0],
-                lastName: nameWords.last!,
-                prefix: nil,
-                suffix: nil
-            )
-        }
-        
-        return nil
-    }
+    // REMOVED: parsePersonNameFromLine - no longer needed since we don't classify business cards here
     
     private func hasFormFields(_ text: String) -> Bool {
         let lowercaseText = text.lowercased()
@@ -624,28 +459,7 @@ class DocumentLayoutAnalyzer {
         return false
     }
     
-    private func hasPricePatterns(_ text: String) -> Bool {
-        // Look for currency patterns
-        let currencyPattern = #"\$\d+\.?\d*|\d+\.?\d*\s*(USD|usd|\$)"#
-        return text.range(of: currencyPattern, options: .regularExpression) != nil
-    }
-    
-    private func hasReceiptKeywords(_ text: String) -> Bool {
-        let receiptKeywords = ["total", "subtotal", "tax", "receipt", "change", "payment"]
-        let lowercaseText = text.lowercased()
-        
-        return receiptKeywords.contains { lowercaseText.contains($0) }
-    }
-    
-    private func hasMenuStructure(_ text: String) -> Bool {
-        let menuKeywords = ["appetizer", "entree", "dessert", "beverage", "menu", "special"]
-        let lowercaseText = text.lowercased()
-        
-        let menuWordCount = menuKeywords.filter { lowercaseText.contains($0) }.count
-        let hasPrices = hasPricePatterns(text)
-        
-        return menuWordCount >= 2 && hasPrices
-    }
+    // REMOVED: Price/receipt/menu detection methods - no longer used after simplification
 }
 
 // MARK: - DocumentType Extension

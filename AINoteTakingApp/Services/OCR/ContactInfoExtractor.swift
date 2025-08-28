@@ -59,16 +59,12 @@ class ContactInfoExtractor {
         let nsText = text as NSString
         let range = NSRange(location: 0, length: nsText.length)
         
-        print("📱 ContactInfoExtractor: Searching for phone numbers in: '\(text)'")
-        
         // Use NSDataDetector for phone numbers
         let matches = dataDetector.matches(in: text, options: [], range: range)
-        print("📱 NSDataDetector found \(matches.count) matches")
         
         for match in matches {
             if match.resultType == .phoneNumber,
                let phoneNumber = match.phoneNumber {
-                print("📱 NSDataDetector phone: \(phoneNumber)")
                 let phone = processPhoneNumber(phoneNumber, in: text, range: match.range)
                 phoneNumbers.append(phone)
             }
@@ -76,19 +72,12 @@ class ContactInfoExtractor {
         
         // Also try custom regex for additional patterns
         let customMatches = phoneNumberRegex.matches(in: text, options: [], range: range)
-        print("📱 Custom regex found \(customMatches.count) matches")
         for match in customMatches {
             let matchedText = nsText.substring(with: match.range)
-            print("📱 Custom regex phone: \(matchedText)")
             if !phoneNumbers.contains(where: { $0.raw.contains(matchedText) }) {
                 let phone = processPhoneNumber(matchedText, in: text, range: match.range)
                 phoneNumbers.append(phone)
             }
-        }
-        
-        print("📱 ContactInfoExtractor: Final phone numbers found: \(phoneNumbers.count)")
-        for phone in phoneNumbers {
-            print("📱 - \(phone.formatted)")
         }
         
         return phoneNumbers
@@ -163,17 +152,13 @@ class ContactInfoExtractor {
         let nsText = text as NSString
         let range = NSRange(location: 0, length: nsText.length)
         
-        print("📧 ContactInfoExtractor: Searching for emails in: '\(text)'")
-        
         // Use NSDataDetector
         let matches = dataDetector.matches(in: text, options: [], range: range)
-        print("📧 NSDataDetector found \(matches.count) matches")
         
         for match in matches {
             if match.resultType == .link,
                let url = match.url,
                url.scheme == "mailto" {
-                print("📧 NSDataDetector email: \(url.absoluteString)")
                 let email = processEmailAddress(url.absoluteString.replacingOccurrences(of: "mailto:", with: ""), in: text)
                 emailAddresses.append(email)
             }
@@ -181,19 +166,12 @@ class ContactInfoExtractor {
         
         // Also use custom regex
         let customMatches = emailRegex.matches(in: text, options: [], range: range)
-        print("📧 Custom regex found \(customMatches.count) matches")
         for match in customMatches {
             let matchedText = nsText.substring(with: match.range)
-            print("📧 Custom regex email: \(matchedText)")
             if !emailAddresses.contains(where: { $0.address == matchedText }) {
                 let email = processEmailAddress(matchedText, in: text)
                 emailAddresses.append(email)
             }
-        }
-        
-        print("📧 ContactInfoExtractor: Final emails found: \(emailAddresses.count)")
-        for email in emailAddresses {
-            print("📧 - \(email.address)")
         }
         
         return emailAddresses

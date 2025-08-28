@@ -31,18 +31,21 @@ class CameraProcessingService: ObservableObject {
     private let locationService: LocationService
     private let ocrService: OCRService
     private let attachmentService: AttachmentService
+    private let documentClassifier: DocumentClassifier
     
     // MARK: - Initialization
     init(
         dataManager: DataManager = DataManager.shared,
         locationService: LocationService? = nil,
         ocrService: OCRService? = nil,
-        attachmentService: AttachmentService? = nil
+        attachmentService: AttachmentService? = nil,
+        documentClassifier: DocumentClassifier? = nil
     ) {
         self.dataManager = dataManager
         self.locationService = locationService ?? LocationService()
         self.ocrService = ocrService ?? OCRService()
         self.attachmentService = attachmentService ?? AttachmentService.shared
+        self.documentClassifier = documentClassifier ?? DocumentClassifier()
     }
     
     // MARK: - Public Methods
@@ -62,39 +65,88 @@ class CameraProcessingService: ObservableObject {
         }
         
         do {
-            // Step 1: Request location permission and get location (10% progress)
+            // Step 1: Classify document type FIRST (5% progress) - FAST!
+            processingProgress = 0.05
+            print("🎯 Classifying document type using image analysis...")
+            let classification = await documentClassifier.classifyDocument(image)
+            print("📊 Document classified as: \(classification.category.rawValue) (confidence: \(classification.confidence))")
+            
+            // Step 2: Get location (only if enabled in settings) (10% progress)
             processingProgress = 0.1
-            print("📍 Requesting location permission...")
-            let permissionGranted = await locationService.requestLocationPermission()
-            print("📍 Location permission granted: \(permissionGranted)")
-
-            let location = await locationService.getCurrentLocationSafely()
-            if let location = location {
-                print("📍 Location captured successfully: \(location.latitude), \(location.longitude)")
+            
+            var location: LocationCoordinate? = nil
+            let locationEnabled = UserDefaults.standard.bool(forKey: "enableLocationCapture")
+            
+            if locationEnabled {
+                print("📍 Location enabled - requesting location...")
+                let permissionGranted = await locationService.requestLocationPermission()
+                print("📍 Location permission granted: \(permissionGranted)")
+                
+                location = await locationService.getCurrentLocationSafely()
+                if let location = location {
+                    print("📍 Location captured: \(location.latitude), \(location.longitude)")
+                } else {
+                    print("⚠️ Location request failed")
+                }
             } else {
-                print("⚠️ No location captured - using test coordinates for debugging")
-                // For testing purposes, add some test coordinates if location is unavailable
-                // This helps verify the UI works when location data is present
-                // Remove this in production or when location services are working
+                print("📍 Location capture disabled in settings - skipping")
             }
             
-            // Step 2: Perform OCR (40% progress)
+            // Step 3: Perform OPTIMIZED OCR based on document type (40% progress)
             processingProgress = 0.4
             
-            // Quick pre-scan to detect document type and optimize OCR
-            print("🔍 Starting quick OCR scan for document type detection...")
-            let quickOcrResult = await ocrService.performOCR(on: image, options: .minimal)
-            print("📄 Quick OCR found: '\(quickOcrResult.rawText.prefix(100))...'")
+            let ocrResult: OCRResult
             
-            let isLikelyBusinessCard = self.detectBusinessCardFromQuickScan(quickOcrResult.rawText)
-            print("🔍 Document type detection: \(isLikelyBusinessCard ? "✅ BUSINESS CARD" : "📄 Regular Document")")
+            switch classification.category {
+            case .businessCard:
+                // Only use business card OCR for actual business cards
+                print("💼 Processing as business card...")
+                ocrResult = await ocrService.performBusinessCardOCR(on: image)
+                
+            case .receipt:
+                // Optimized OCR for receipts - fast and efficient
+                print("🧾 Processing as receipt with optimized OCR...")
+                ocrResult = await ocrService.performReceiptOCR(on: image)
+                
+            case .photo:
+                // Skip OCR for photos
+                print("📸 Photo detected - skipping OCR")
+                ocrResult = OCRResult(
+                    rawText: "",
+                    detectedTables: [],
+                    confidence: 0,
+                    preprocessedImage: image,
+                    structuredData: nil,
+                    documentType: .generic
+                )
+                
+            case .invoice, .printedDocument:
+                // Standard OCR for documents
+                print("📄 Processing as document with standard OCR...")
+                ocrResult = await ocrService.performOCR(on: image)
+                
+            case .whiteboard:
+                // Whiteboard - use standard OCR without business card detection
+                print("📝 Processing as whiteboard with standard OCR...")
+                ocrResult = await ocrService.performOCR(on: image)
+                
+            case .handwritten:
+                // Handwritten - use standard OCR
+                print("✍️ Processing as handwritten with standard OCR...")
+                ocrResult = await ocrService.performOCR(on: image)
+                
+            case .screenshot:
+                // Screenshot - minimal OCR
+                print("🖥️ Processing as screenshot with minimal OCR...")
+                ocrResult = await ocrService.performOCR(on: image, options: .minimal)
+                
+            case .unknown:
+                // Unknown - minimal OCR without forcing business card
+                print("❓ Unknown document type - using minimal OCR")
+                ocrResult = await ocrService.performOCR(on: image, options: .minimal)
+            }
             
-            // Use optimized OCR based on document type
-            let ocrResult = isLikelyBusinessCard ? 
-                await ocrService.performBusinessCardOCR(on: image) :
-                await ocrService.performOCR(on: image)
-            
-            print("📝 OCR completed (\(isLikelyBusinessCard ? "Business Card" : "Document") mode) with \(ocrResult.rawText.count) characters")
+            print("📝 OCR completed with \(ocrResult.rawText.count) characters")
             
             // Step 3: Create image attachment (70% progress)
             processingProgress = 0.7
@@ -197,56 +249,6 @@ class CameraProcessingService: ObservableObject {
         return formatter.string(from: Date())
     }
     
-    // MARK: - Business Card Detection
-    private func detectBusinessCardFromQuickScan(_ text: String) -> Bool {
-        let lowercaseText = text.lowercased()
-        var score = 0
-        
-        // Quick indicators that suggest business card
-        
-        // Check for email patterns
-        if lowercaseText.range(of: #"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}"#, options: .regularExpression) != nil {
-            score += 3
-        }
-        
-        // Check for phone patterns
-        if lowercaseText.range(of: #"\d{3}[-.\s]?\d{3}[-.\s]?\d{4}"#, options: .regularExpression) != nil {
-            score += 3
-        }
-        
-        // Check for business-related terms
-        let businessTerms = ["inc", "llc", "corp", "company", "solutions", "services", "director", "manager", "ceo"]
-        for term in businessTerms {
-            if lowercaseText.contains(term) {
-                score += 1
-                break
-            }
-        }
-        
-        // Check for person name patterns (capitalized words)
-        let lines = text.components(separatedBy: .newlines)
-        for line in lines.prefix(3) {
-            let words = line.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-            if words.count >= 2 && words.count <= 4 {
-                let capitalizedWords = words.filter { word in
-                    word.first?.isUppercase == true && word.allSatisfy { $0.isLetter || $0 == "." }
-                }
-                if capitalizedWords.count >= 2 {
-                    score += 2
-                    break
-                }
-            }
-        }
-        
-        // Business cards typically have concise content
-        let wordCount = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-        if wordCount >= 8 && wordCount <= 50 {
-            score += 1
-        }
-        
-        print("🎯 Business card detection score: \(score) (need ≥6)")
-        return score >= 6
-    }
 }
 
 // MARK: - DataManager Extension for Camera Notes

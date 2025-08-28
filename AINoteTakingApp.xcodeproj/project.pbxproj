@@ -22,6 +22,7 @@
 		C60357012E58A06A002B1380 /* NotesService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60356FA2E58A06A002B1380 /* NotesService.swift */; };
 		C60357052E58B5CB002B1380 /* AttachmentsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60357042E58B5CB002B1380 /* AttachmentsService.swift */; };
 		C60357082E58BD81002B1380 /* FilePathResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60357062E58BD81002B1380 /* FilePathResolver.swift */; };
+		C61161D62E6045E100191EFE /* AIProcessingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61161D52E6045E100191EFE /* AIProcessingView.swift */; };
 		C61E5FA32E398D4300506179 /* AIAssistantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA12E398D4300506179 /* AIAssistantService.swift */; };
 		C61E5FA92E398D7B00506179 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA42E398D7B00506179 /* AIAssistantView.swift */; };
 		C61E5FAA2E398D7B00506179 /* TypingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61E5FA72E398D7B00506179 /* TypingIndicatorView.swift */; };
@@ -73,6 +74,7 @@
 		C6A034D82E5B2B9D005E2806 /* ContactInfoExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A034CE2E5B2B9D005E2806 /* ContactInfoExtractor.swift */; };
 		C6A034DE2E5B3D28005E2806 /* TableDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A034DC2E5B3D28005E2806 /* TableDetector.swift */; };
 		C6A034E02E5B3D28005E2806 /* ImagePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A034DA2E5B3D28005E2806 /* ImagePreprocessor.swift */; };
+		C6A035132E5F7CA7005E2806 /* DocumentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A035112E5F7CA7005E2806 /* DocumentClassifier.swift */; };
 		C6FB017F2E3CCB1200763881 /* ImageGalleryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB017D2E3CCB1200763881 /* ImageGalleryViewModel.swift */; };
 		C6FB01832E3CCB4300763881 /* ImageGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB01812E3CCB4300763881 /* ImageGalleryView.swift */; };
 		C6FB01842E3CCB4300763881 /* ImageDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FB01802E3CCB4300763881 /* ImageDetailView.swift */; };
@@ -102,6 +104,7 @@
 		C60356FA2E58A06A002B1380 /* NotesService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesService.swift; sourceTree = "<group>"; };
 		C60357042E58B5CB002B1380 /* AttachmentsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentsService.swift; sourceTree = "<group>"; };
 		C60357062E58BD81002B1380 /* FilePathResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePathResolver.swift; sourceTree = "<group>"; };
+		C61161D52E6045E100191EFE /* AIProcessingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProcessingView.swift; sourceTree = "<group>"; };
 		C61E5FA12E398D4300506179 /* AIAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantService.swift; sourceTree = "<group>"; };
 		C61E5FA42E398D7B00506179 /* AIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
 		C61E5FA52E398D7B00506179 /* ChatInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputView.swift; sourceTree = "<group>"; };
@@ -153,6 +156,7 @@
 		C6A034D12E5B2B9D005E2806 /* StructuredTextModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredTextModels.swift; sourceTree = "<group>"; };
 		C6A034DA2E5B3D28005E2806 /* ImagePreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreprocessor.swift; sourceTree = "<group>"; };
 		C6A034DC2E5B3D28005E2806 /* TableDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableDetector.swift; sourceTree = "<group>"; };
+		C6A035112E5F7CA7005E2806 /* DocumentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentClassifier.swift; sourceTree = "<group>"; };
 		C6FB017D2E3CCB1200763881 /* ImageGalleryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryViewModel.swift; sourceTree = "<group>"; };
 		C6FB01802E3CCB4300763881 /* ImageDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDetailView.swift; sourceTree = "<group>"; };
 		C6FB01812E3CCB4300763881 /* ImageGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryView.swift; sourceTree = "<group>"; };
@@ -325,6 +329,7 @@
 		C681F3782E37A803000A7FB3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C61161D52E6045E100191EFE /* AIProcessingView.swift */,
 				C60356F32E58922E002B1380 /* BackendAuthView.swift */,
 				C6FB01822E3CCB4300763881 /* ImageGallery */,
 				C61E5FB92E3A139B00506179 /* Components */,
@@ -344,6 +349,7 @@
 		C6A034D22E5B2B9D005E2806 /* OCR */ = {
 			isa = PBXGroup;
 			children = (
+				C6A035112E5F7CA7005E2806 /* DocumentClassifier.swift */,
 				C6A034DA2E5B3D28005E2806 /* ImagePreprocessor.swift */,
 				C6A034DC2E5B3D28005E2806 /* TableDetector.swift */,
 				C6A034CD2E5B2B9D005E2806 /* BusinessCardProcessor.swift */,
@@ -454,6 +460,7 @@
 				C657B01D2E39844200A40BDC /* FolderManager.swift in Sources */,
 				C657B01E2E39844200A40BDC /* DataManager.swift in Sources */,
 				A1234567890123456789001 /* AINoteTakingAppApp.swift in Sources */,
+				C6A035132E5F7CA7005E2806 /* DocumentClassifier.swift in Sources */,
 				C61E5FC22E3AADAC00506179 /* AttachmentService.swift in Sources */,
 				C61E5FC32E3AADAC00506179 /* CameraProcessingService.swift in Sources */,
 				C61E5FC42E3AADAC00506179 /* LocationService.swift in Sources */,
@@ -463,6 +470,7 @@
 				C60356EE2E588C95002B1380 /* APIModels.swift in Sources */,
 				C681F3862E37A803000A7FB3 /* AIProcessor.swift in Sources */,
 				C61E5FBA2E3A139B00506179 /* AttachmentComponents.swift in Sources */,
+				C61161D62E6045E100191EFE /* AIProcessingView.swift in Sources */,
 				C61E5FBB2E3A139B00506179 /* SharedImagePicker.swift in Sources */,
 				C681F3842E37A803000A7FB3 /* FileImportManager.swift in Sources */,
 				C61E5FCB2E3AADC300506179 /* NotesListAlerts.swift in Sources */,

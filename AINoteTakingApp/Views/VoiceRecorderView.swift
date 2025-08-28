@@ -11,7 +11,6 @@ struct VoiceRecorderView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var audioManager = AudioManager()
     @StateObject private var aiProcessor = AIProcessor()
-    @State private var showingNoteEditor = false
     @State private var recordedNote: Note?
     
     let currentFolder: Folder?
@@ -60,11 +59,6 @@ struct VoiceRecorderView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingNoteEditor) {
-            if let note = recordedNote {
-                NoteEditorView(note: note)
-            }
-        }
         .alert("Error", isPresented: .constant(audioManager.errorMessage != nil)) {
             Button("OK") {
                 audioManager.errorMessage = nil
@@ -110,19 +104,11 @@ struct VoiceRecorderView: View {
             processTranscriptAndCreateNote(transcript: "Voice recording completed", audioURL: nil)
         }
 
-        // Fallback: If nothing happens within 3 seconds, force create a note
+        // Fallback: If nothing happens within 3 seconds, dismiss the view
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            if !self.showingNoteEditor {
-                print("🎤 Fallback: Force creating note")
-                let fallbackNote = Note(
-                    title: "Voice Note \(Date().formatted(date: .omitted, time: .shortened))",
-                    content: currentTranscript.isEmpty ? "Voice recording completed" : currentTranscript,
-                    audioURL: recordingURL,
-                    tags: ["voice", "recording"],
-                    category: Category(name: "Voice Notes", color: "#FF6B6B")
-                )
-                self.recordedNote = fallbackNote
-                self.showingNoteEditor = true
+            if self.recordedNote == nil {
+                print("🎤 Fallback: No note created after 3 seconds, dismissing")
+                self.dismiss()
             }
         }
     }
@@ -166,12 +152,14 @@ struct VoiceRecorderView: View {
                 print("🎤 Note folder ID: \(savedNote.folderId?.uuidString ?? "root")")
 
                 recordedNote = savedNote
-                showingNoteEditor = true
                 
                 // Notify that a new note was created
                 NotificationCenter.default.post(name: Notification.Name("NotesDidChange"), object: nil)
-
-                print("🎤 showingNoteEditor set to true")
+                
+                print("🎤 Note saved successfully, dismissing voice recorder")
+                
+                // Dismiss the voice recorder view instead of showing note editor
+                dismiss()
             }
         }
     }
@@ -311,240 +299,7 @@ struct RecordingControls: View {
     }
 }
 
-struct AIProcessingView: View {
-    let content: String
-    let onProcessingComplete: (ProcessedContent) -> Void
-    
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var aiProcessor = AIProcessor()
-    @State private var processedContent: ProcessedContent?
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                if aiProcessor.isProcessing {
-                    ProcessingView(progress: aiProcessor.processingProgress)
-                } else if let processed = processedContent {
-                    ProcessedContentView(content: processed) {
-                        onProcessingComplete(processed)
-                        dismiss()
-                    }
-                } else {
-                    ContentPreview(content: content)
-                }
-            }
-            .padding()
-            .navigationTitle("AI Processing")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .onAppear {
-            processContent()
-        }
-    }
-    
-    private func processContent() {
-        Task {
-            print("🚀 AI Enhancement: Starting enhanced content processing...")
-            
-            // Use the existing AIProcessor which now supports structured content processing
-            let result = await aiProcessor.processContent(content)
-            
-            await MainActor.run {
-                processedContent = result
-            }
-            
-            print("✅ AI Enhancement: Processing complete")
-            print("📄 Summary: \(result.summary)")
-            print("⚡ Action items: \(result.actionItems.count)")
-            print("🏷️ Tags: \(result.suggestedTags.joined(separator: ", "))")
-            
-            if result.suggestedCategory?.name.lowercased().contains("contact") == true {
-                print("🎯 Business card processing detected!")
-            }
-        }
-    }
-    
-}
-
-struct ProcessingView: View {
-    let progress: Double
-    
-    var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
-            // AI Brain Animation
-            Image(systemName: "brain.head.profile")
-                .font(.system(size: 80))
-                .foregroundColor(.blue)
-                .scaleEffect(1.0 + sin(Date().timeIntervalSince1970 * 2) * 0.1)
-                .animation(.easeInOut(duration: 1).repeatForever(), value: UUID())
-            
-            Text("AI is processing your content...")
-                .font(.headline)
-                .multilineTextAlignment(.center)
-            
-            ProgressView(value: progress)
-                .progressViewStyle(LinearProgressViewStyle())
-                .frame(maxWidth: 200)
-            
-            Text("\(Int(progress * 100))% complete")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Spacer()
-        }
-    }
-}
-
-struct ProcessedContentView: View {
-    let content: ProcessedContent
-    let onApply: () -> Void
-    
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Summary
-                if !content.summary.isEmpty {
-                    ProcessedSection(
-                        title: "Summary",
-                        icon: "text.alignleft",
-                        color: .blue
-                    ) {
-                        Text(content.summary)
-                    }
-                }
-                
-                // Key Points
-                if !content.keyPoints.isEmpty {
-                    ProcessedSection(
-                        title: "Key Points",
-                        icon: "key.fill",
-                        color: .orange
-                    ) {
-                        ForEach(content.keyPoints, id: \.self) { point in
-                            HStack(alignment: .top) {
-                                Text("•")
-                                Text(point)
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-                
-                // Action Items
-                if !content.actionItems.isEmpty {
-                    ProcessedSection(
-                        title: "Action Items",
-                        icon: "checkmark.circle",
-                        color: .green
-                    ) {
-                        ForEach(content.actionItems) { item in
-                            HStack {
-                                Image(systemName: "circle")
-                                    .foregroundColor(.gray)
-                                Text(item.title)
-                                Spacer()
-                                Circle()
-                                    .fill(Color(hex: item.priority.color))
-                                    .frame(width: 8, height: 8)
-                            }
-                        }
-                    }
-                }
-                
-                // Suggested Tags
-                if !content.suggestedTags.isEmpty {
-                    ProcessedSection(
-                        title: "Suggested Tags",
-                        icon: "tag",
-                        color: .purple
-                    ) {
-                        FlowLayout(spacing: 8) {
-                            ForEach(content.suggestedTags, id: \.self) { tag in
-                                Text("#\(tag)")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.purple.opacity(0.2))
-                                    .foregroundColor(.purple)
-                                    .cornerRadius(8)
-                            }
-                        }
-                    }
-                }
-                
-                // Apply Button
-                Button("Apply AI Enhancements") {
-                    onApply()
-                }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
-                .padding(.top)
-            }
-        }
-    }
-}
-
-struct ProcessedSection<Content: View>: View {
-    let title: String
-    let icon: String
-    let color: Color
-    @ViewBuilder let content: Content
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                Text(title)
-                    .font(.headline)
-                    .foregroundColor(color)
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                content
-            }
-            .padding()
-            .background(color.opacity(0.1))
-            .cornerRadius(8)
-        }
-    }
-}
-
-struct ContentPreview: View {
-    let content: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Content to Process")
-                .font(.headline)
-            
-            ScrollView {
-                Text(content)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-            }
-            .frame(maxHeight: 300)
-            
-            Button("Start AI Processing") {
-                // Processing will start automatically
-            }
-            .buttonStyle(.borderedProminent)
-            .frame(maxWidth: .infinity)
-        }
-    }
-}
+// AI Processing views have been moved to AIProcessingView.swift for better separation of concerns
 
 struct ImagePicker: UIViewControllerRepresentable {
     let onImageSelected: (UIImage) -> Void

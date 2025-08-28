@@ -57,7 +57,7 @@ class LocationService: NSObject, ObservableObject {
     private let locationManager = CLLocationManager()
     private var locationContinuation: CheckedContinuation<LocationCoordinate, Error>?
     private var authorizationContinuation: CheckedContinuation<Bool, Never>?
-    private let timeout: TimeInterval = 10.0 // 10 seconds timeout
+    private let timeout: TimeInterval = 6.0 // 6 seconds timeout for quality location data
     
     // MARK: - Initialization
     override init() {
@@ -81,16 +81,26 @@ class LocationService: NSObject, ObservableObject {
     
     /// Gets the current location with a timeout
     func getCurrentLocation() async throws -> LocationCoordinate {
-        // Check if location services are enabled
-        guard CLLocationManager.locationServicesEnabled() else {
-            throw LocationServiceError.locationUnavailable
-        }
-        
-        // Check authorization status
-        let authStatus = locationManager.authorizationStatus
-        guard authStatus == .authorizedWhenInUse || authStatus == .authorizedAlways else {
-            throw LocationServiceError.permissionDenied
-        }
+        // Move authorization checks off main thread to prevent UI blocking
+        return try await Task.detached {
+            // Check if location services are enabled
+            guard CLLocationManager.locationServicesEnabled() else {
+                throw LocationServiceError.locationUnavailable
+            }
+            
+            // Check authorization status (this was blocking the main thread)
+            let authStatus = await MainActor.run {
+                self.locationManager.authorizationStatus
+            }
+            guard authStatus == .authorizedWhenInUse || authStatus == .authorizedAlways else {
+                throw LocationServiceError.permissionDenied
+            }
+            
+            return try await self.requestLocationUpdate()
+        }.value
+    }
+    
+    private func requestLocationUpdate() async throws -> LocationCoordinate {
         
         return try await withCheckedThrowingContinuation { continuation in
             locationContinuation = continuation
