@@ -50,6 +50,7 @@ class NoteEditorViewModel: ObservableObject {
     @Published var isSaving = false
     @Published var errorMessage: String?
     @Published var isSavedOnServer = false  // Track if note is saved on server
+    @Published var showTokenExpiredAlert = false
     
     // MARK: - Computed Properties
     var isNewNote: Bool {
@@ -219,9 +220,15 @@ class NoteEditorViewModel: ObservableObject {
                         case .finished:
                             break
                         case .failure(let error):
-                            print("❌ Backend update failed, will try creating as new note instead")
-                            // If update fails, try creating as new note (fallback for local-only notes)
-                            self.createNoteOnBackend(backendNote, continuation: continuation)
+                            print("❌ Backend update failed: \(error)")
+                            // Check if it's a token expiration error
+                            if case .unauthorized = error {
+                                self.handleTokenExpiration()
+                                continuation.resume(throwing: error)
+                            } else {
+                                // If update fails, try creating as new note (fallback for local-only notes)
+                                self.createNoteOnBackend(backendNote, continuation: continuation)
+                            }
                         }
                         saveCancellable = nil // Clean up reference
                     },
@@ -252,6 +259,10 @@ class NoteEditorViewModel: ObservableObject {
                         break
                     case .failure(let error):
                         print("❌ Backend creation error: \(error)")
+                        // Check if it's a token expiration error
+                        if case .unauthorized = error {
+                            self.handleTokenExpiration()
+                        }
                         continuation.resume(throwing: error)
                     }
                     createCancellable = nil // Clean up reference
@@ -760,6 +771,17 @@ class NoteEditorViewModel: ObservableObject {
             ocrText = nil
             latitude = nil
             longitude = nil
+        }
+    }
+    
+    // MARK: - Token Expiration Handling
+    private func handleTokenExpiration() {
+        // Show alert to user
+        showTokenExpiredAlert = true
+        
+        // After a short delay, logout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.networkService.logout()
         }
     }
 }

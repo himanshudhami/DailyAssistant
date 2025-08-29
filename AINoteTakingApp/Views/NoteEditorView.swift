@@ -138,6 +138,13 @@ struct NoteEditorView: View {
                 onProcessingComplete: viewModel.applyAIProcessing
             )
         }
+        .alert("Session Expired", isPresented: $viewModel.showTokenExpiredAlert) {
+            Button("OK") {
+                // Logout will happen automatically after alert is dismissed
+            }
+        } message: {
+            Text("Your session has expired. Please log in again to continue syncing with the server. Your data is still saved locally.")
+        }
     }
     
     // MARK: - Computed Properties

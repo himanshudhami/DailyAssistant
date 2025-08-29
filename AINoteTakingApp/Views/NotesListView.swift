@@ -103,6 +103,13 @@ struct NotesListView: View {
             alertState: alertState,
             actions: NotesListAlertActionsImpl(viewModel: viewModel)
         )
+        .alert("Session Expired", isPresented: $viewModel.showTokenExpiredAlert) {
+            Button("OK") {
+                // Logout will happen automatically after alert is dismissed
+            }
+        } message: {
+            Text("Your session has expired. Please log in again to continue syncing with the server. Your data is still saved locally.")
+        }
     }
 
     // MARK: - Helper Methods

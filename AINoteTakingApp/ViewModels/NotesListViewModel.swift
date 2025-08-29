@@ -25,6 +25,7 @@ class NotesListViewModel: ObservableObject {
     @Published var selectedCategory: Category?
     @Published var sortOption: NoteSortOption = .modifiedDate
     @Published var viewMode: ViewMode = .list
+    @Published var showTokenExpiredAlert = false
     
     // MARK: - Private Properties
     private let dataManager = DataManager.shared
@@ -172,10 +173,13 @@ class NotesListViewModel: ObservableObject {
                     categoryId: fieldsToUpdate["categoryId"] as? UUID
                 )
                 .sink(
-                    receiveCompletion: { completion in
+                    receiveCompletion: { [weak self] completion in
                         if case .failure(let error) = completion {
                             print("❌ Failed to sync note changes to backend: \(error)")
-                            // Could implement retry logic or show error to user
+                            // Check if it's a token expiration error
+                            if case .unauthorized = error {
+                                self?.handleTokenExpiration()
+                            }
                         }
                     },
                     receiveValue: { updatedNote in
@@ -196,11 +200,13 @@ class NotesListViewModel: ObservableObject {
         // Also send to backend
         networkService.categories.createCategory(name: name, color: color)
             .sink(
-                receiveCompletion: { completion in
+                receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
                         print("❌ Failed to create category on backend: \(error)")
-                        // Note: Category already created locally, so UI shows it
-                        // Could implement retry logic here
+                        // Check if it's a token expiration error
+                        if case .unauthorized = error {
+                            self?.handleTokenExpiration()
+                        }
                     }
                 },
                 receiveValue: { backendCategory in
@@ -296,11 +302,13 @@ class NotesListViewModel: ObservableObject {
         // Also send to backend
         networkService.folders.createFolder(newFolder)
             .sink(
-                receiveCompletion: { completion in
+                receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
                         print("❌ Failed to create folder on backend: \(error)")
-                        // Note: Folder already created locally, so UI shows it
-                        // Could implement retry logic here
+                        // Check if it's a token expiration error
+                        if case .unauthorized = error {
+                            self?.handleTokenExpiration()
+                        }
                     }
                 },
                 receiveValue: { backendFolder in
@@ -360,6 +368,17 @@ class NotesListViewModel: ObservableObject {
         loadNotes()
         loadCategories()
         loadFolders()
+    }
+    
+    // MARK: - Token Expiration Handling
+    private func handleTokenExpiration() {
+        // Show alert to user
+        showTokenExpiredAlert = true
+        
+        // After a short delay, logout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.networkService.logout()
+        }
     }
 }
 
